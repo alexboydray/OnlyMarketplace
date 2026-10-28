@@ -36,6 +36,20 @@ object Marketplace {
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
     const val DEBUG_TOASTS = true
 
+    /** One-line page report for the debug strip: is the content there, visible, and on screen? */
+    val DIAG_JS = """
+        (function () {
+          var b = document.body; if (!b) return 'no body';
+          var cs = getComputedStyle(b);
+          var i = document.querySelector('input');
+          var r = i ? i.getBoundingClientRect() : null;
+          return document.title.slice(0, 24) + ' | op=' + cs.opacity + ' vis=' + cs.visibility +
+            ' w=' + innerWidth + ' h=' + document.documentElement.scrollHeight + ' sy=' + scrollY +
+            ' input@' + (r ? Math.round(r.top) + ',' + Math.round(r.left) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) : 'none') +
+            ' | ' + b.innerText.slice(0, 70).replace(/\s+/g, ' ');
+        })()
+    """.trimIndent()
+
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
 

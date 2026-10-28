@@ -211,13 +211,12 @@ class MainActivity : ComponentActivity() {
 
         override fun onPageFinished(view: WebView, url: String) {
             refresh.isRefreshing = false
-            if (Marketplace.isFacebookHost(Uri.parse(url))) {
+            view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
+            if (Uri.parse(url).path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
             }
             if (Marketplace.DEBUG_TOASTS) {
-                view.evaluateJavascript(
-                    "(document.body ? document.body.innerText.length : -1) + 'ch ' + document.querySelectorAll('input').length + 'in dlg=' + !!document.querySelector('[role=dialog]') + ' ' + document.title.slice(0,30) + ' @ ' + location.href.slice(0,70)"
-                ) { note("DONE $it") }
+                view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
             }
         }
     }
