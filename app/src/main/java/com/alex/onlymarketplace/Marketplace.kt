@@ -76,10 +76,35 @@ object Marketplace {
             }
             e = e.parentElement;
           }
-          var r = i.getBoundingClientRect();
-          var top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          var cover = (top && top !== i && !i.contains(top) && !top.contains(i)) ? top.tagName + (top.id ? '#' + top.id : '') + '.' + String(top.className).slice(0, 30) : 'none';
-          return 'hidden=[' + found.join(' > ') + '] cover=' + cover;
+          // Full-viewport fixed/absolute elements that don't contain the form are overlays
+          // (splash screens, loaders). Hit-testing ignores them when pointer-events is none.
+          var killed = [];
+          document.querySelectorAll('body *').forEach(function (el) {
+            if (el.contains(i)) return;
+            var s = getComputedStyle(el);
+            if (s.position !== 'fixed' && s.position !== 'absolute') return;
+            var r = el.getBoundingClientRect();
+            if (r.width >= innerWidth * 0.85 && r.height >= innerHeight * 0.6) {
+              killed.push(el.tagName + (el.id ? '#' + el.id : '') + '.' + String(el.className).slice(0, 20) +
+                ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' bg=' + s.backgroundColor + ' pe=' + s.pointerEvents + ' z=' + s.zIndex);
+              el.style.setProperty('display', 'none', 'important');
+            }
+          });
+          // Ancestors that clip (overflow hidden) to a box smaller than the input's position.
+          var clipped = [];
+          var ir = i.getBoundingClientRect();
+          for (e = i.parentElement; e && e !== document.body; e = e.parentElement) {
+            var cs = getComputedStyle(e), cr = e.getBoundingClientRect();
+            if (cs.overflow !== 'visible' && (cr.height < 40 || cr.width < 40 || cr.bottom < ir.top)) {
+              clipped.push(e.tagName + (e.id ? '#' + e.id : '') + ' ' + Math.round(cr.width) + 'x' + Math.round(cr.height));
+              e.style.setProperty('overflow', 'visible', 'important');
+            }
+          }
+          var kids = Array.prototype.slice.call(document.body.children, 0, 6).map(function (k) {
+            var ks = getComputedStyle(k), kr = k.getBoundingClientRect();
+            return k.tagName + (k.id ? '#' + k.id : '') + ':' + ks.position + ' ' + Math.round(kr.width) + 'x' + Math.round(kr.height) + ' ' + ks.backgroundColor;
+          });
+          return 'hidden=[' + found.join(' > ') + '] overlays=[' + killed.join(' | ') + '] clipped=[' + clipped.join(' | ') + '] body>' + kids.join(', ');
         })()
     """.trimIndent()
 
