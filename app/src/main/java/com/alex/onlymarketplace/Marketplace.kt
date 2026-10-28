@@ -17,6 +17,9 @@ object Marketplace {
         CookieManager.getInstance().getCookie("https://www.facebook.com")
             ?.contains("c_user=") == true
 
+    /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
+    const val DEBUG_TOASTS = true
+
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
 

@@ -7,9 +7,11 @@ import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
         refresh = SwipeRefreshLayout(this).apply {
             addView(webView)
             setColorSchemeColors(0xFF1877F2.toInt())
+            setDistanceToTriggerSync(300) // needs a deliberate pull, not a flick
             setOnRefreshListener { webView.reload() }
         }
         setContentView(refresh)
@@ -100,13 +103,28 @@ class MainActivity : ComponentActivity() {
     /** Enforces the Marketplace-only rule for every navigation, including Facebook's in-page (pushState) ones. */
     private inner class MarketplaceClient : WebViewClient() {
 
+        private var lastBounce = ""
+
+        private fun note(msg: String) {
+            if (Marketplace.DEBUG_TOASTS) Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+        }
+
+        /** Send the view back to Marketplace. Posted so it never collides with the navigation that triggered it. */
+        private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
+            if (from == lastBounce) return // already handling this one
+            lastBounce = from
+            note("Blocked: $from")
+            view.post { view.loadUrl(target) }
+        }
+
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
             val scheme = url.scheme?.lowercase()
             if (scheme != "http" && scheme != "https") {
                 // fb:// or intent:// links try to open the Facebook app. We don't want that;
                 // if it was a login attempt, show the web login page instead.
-                if (!Marketplace.isLoggedIn()) view.loadUrl(Marketplace.LOGIN)
+                if (!Marketplace.isLoggedIn()) bounce(view, url.toString(), Marketplace.LOGIN)
+                else note("Ignored app link: $url")
                 return true
             }
             if (!Marketplace.isFacebookHost(url)) {
@@ -115,7 +133,7 @@ class MainActivity : ComponentActivity() {
                 return true
             }
             if (Marketplace.isAllowed(url)) return false // let the WebView load it
-            view.loadUrl(Marketplace.HOME) // anything else bounces back to Marketplace
+            bounce(view, url.toString()) // anything else bounces back to Marketplace
             return true
         }
 
@@ -123,9 +141,11 @@ class MainActivity : ComponentActivity() {
         // reaches shouldOverrideUrlLoading. This hook fires for those, so we re-check here too.
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             val uri = Uri.parse(url)
-            if (Marketplace.isFacebookHost(uri) && !Marketplace.isAllowed(uri)) {
-                view.loadUrl(Marketplace.HOME)
-            }
+            if (Marketplace.isFacebookHost(uri) && !Marketplace.isAllowed(uri)) bounce(view, url)
+        }
+
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame) note("Load error ${error.errorCode}: ${request.url}")
         }
 
         override fun onPageFinished(view: WebView, url: String) {
