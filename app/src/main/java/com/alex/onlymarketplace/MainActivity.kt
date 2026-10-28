@@ -252,20 +252,19 @@ class MainActivity : ComponentActivity() {
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
             if (Marketplace.isAllowed(uri)) return
-            // In-page address changes can be transient (the search overlay briefly sets "/").
-            // Cover the view, give it a beat, then decide from what's actually on screen.
-            view.visibility = View.INVISIBLE
+            // In-page address changes are usually overlays (search, photo viewer) that push "/"
+            // without loading anything. Real feed/home loads come through onPageStarted and are
+            // bounced there. So: give it a beat, then bounce only if the feed is actually on screen.
+            // (No covering here: hiding the view drops keyboard focus and breaks typing.)
             view.postDelayed({
                 val now = Uri.parse(view.url ?: "")
-                if (Marketplace.isAllowed(now)) { view.visibility = View.VISIBLE; return@postDelayed }
-                // Overlays (photo viewer, search) keep the underlying page's title; the real
-                // feed/login pages are titled just "Facebook" / "Log into Facebook".
+                if (Marketplace.isAllowed(now)) return@postDelayed
                 view.evaluateJavascript(
-                    "(function(){var a=document.activeElement;var t=(document.title||'').trim();" +
-                    "return ((a&&a.tagName==='INPUT')||!/^(Facebook|Log into Facebook|Facebook - log in or sign up)$/i.test(t))?'keep:'+t:'bounce:'+t})()"
+                    "(function(){if(document.querySelector('[placeholder*=\"on your mind\" i],[aria-label*=\"on your mind\" i]'))return 'feed';" +
+                    "var t=(document.body.innerText||'').slice(0,3000);return /What's on your mind/i.test(t)?'feed':'overlay'})()"
                 ) { r ->
-                    if (r.startsWith("\"keep")) { note("overlay at ${now.path} kept ($r)"); view.visibility = View.VISIBLE }
-                    else bounce(view, now.toString())
+                    if (r.contains("feed")) bounce(view, now.toString())
+                    else note("overlay at ${now.path} kept")
                 }
             }, 350)
         }

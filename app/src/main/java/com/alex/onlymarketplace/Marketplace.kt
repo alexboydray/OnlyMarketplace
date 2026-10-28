@@ -181,13 +181,23 @@ object Marketplace {
           // text and a handful of tappable children is the bar. Only checked near the top of the
           // tree (bars live there) so it stays cheap.
           var GLYPHS_ONLY = /^[\d+\s•-]*$/;
+          // The bar carries hidden labels naming the tabs; ignore those words when testing.
+          var TAB_WORDS = /Marketplace|Home|Friends|Messenger|Messages|Video|Reels|Watch|Notifications|Menu|Dating|Groups/g;
+          function iconsOnly(el) { return GLYPHS_ONLY.test(el.textContent.replace(TAB_WORDS, '')); }
+          // The Marketplace header (back, title, search) is also icons-only once tab words are
+          // ignored, but it has 3 cells; the nav bar has 6. Require 5+ cells in the first two levels.
+          function cellCount(el) {
+            var n = el.children.length;
+            if (n === 1) n = el.children[0].children.length;
+            return n;
+          }
+          function isIconBar(el) { return cellCount(el) >= 5 && iconsOnly(el); }
           function hideStrip(root) {
             var els = root.querySelectorAll('div, nav, header');
             for (var i = 0; i < els.length; i++) {
               var el = els[i];
               if (el.childElementCount === 0 || el.querySelectorAll('*').length > 120) continue;
-              if (!GLYPHS_ONLY.test(el.textContent)) continue;
-              if (el.querySelectorAll('a, [role=button], [role=link], svg, i, span').length < 4) continue;
+              if (!isIconBar(el)) continue;
               var r = el.getBoundingClientRect();
               if (r.width < innerWidth * 0.9 || r.height < 40 || r.height > 130) continue;
               hide(el);
@@ -205,8 +215,8 @@ object Marketplace {
                 var r = el.getBoundingClientRect();
                 if (k === 0) report.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' t=' + el.textContent.replace(/\s+/g, '').length);
                 if (r.width >= innerWidth * 0.9 && r.height >= 40 && r.height <= 130) {
-                  if (GLYPHS_ONLY.test(el.textContent)) { hide(el); if (k === 0) report.push('HID'); }
-                  else if (k === 0) report.push('TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
+                  if (isIconBar(el)) { hide(el); if (k === 0) report.push('HID'); }
+                  else if (k === 0) report.push('cells=' + cellCount(el) + ' TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
                   break;
                 }
                 el = el.parentElement;
