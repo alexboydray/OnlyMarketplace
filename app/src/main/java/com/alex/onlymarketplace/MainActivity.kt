@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -171,7 +172,7 @@ class MainActivity : ComponentActivity() {
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(
-                    "document.title + ' | ' + location.href + ' | ' + (document.body ? document.body.innerText.length : -1) + ' chars'"
+                    "(document.body ? document.body.innerText.length : -1) + ' chars, ' + document.querySelectorAll('input').length + ' inputs | ' + document.title"
                 ) { note("Page: $it") }
             }
         }
@@ -179,6 +180,16 @@ class MainActivity : ComponentActivity() {
 
     /** Lets the page open the system file picker (needed to attach photos to a listing). */
     private inner class FileChooserChromeClient : WebChromeClient() {
+        private var jsErrorsShown = 0
+
+        override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+            if (Marketplace.DEBUG_TOASTS && msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR && jsErrorsShown < 3) {
+                jsErrorsShown++
+                Toast.makeText(this@MainActivity, "JS: ${msg.message().take(120)}", Toast.LENGTH_LONG).show()
+            }
+            return false
+        }
+
         override fun onShowFileChooser(
             webView: WebView,
             callback: ValueCallback<Array<Uri>>,
