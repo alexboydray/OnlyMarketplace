@@ -21,17 +21,21 @@ object Marketplace {
      * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
      * hand off to the native app. Skip it and go straight to the web login form instead.
      */
-    private var loginRedirectTried = false
-
     fun loginRedirect(uri: Uri): String? {
         if (!uri.path.orEmpty().startsWith("/unified/login_via")) return null
-        // Only try the shortcut once. If Facebook sends us straight back here, let the
-        // interstitial load instead; it has a "log in in browser" option.
-        if (loginRedirectTried) return null
-        loginRedirectTried = true
         val next = uri.getQueryParameter("next") ?: HOME
         return "https://www.facebook.com/login/?next=" + Uri.encode(next)
     }
+
+    /**
+     * Facebook's mobile login page relies on a script that crashes inside a WebView and leaves
+     * the page collapsed. The desktop login page is a plain form, so while logged out and off
+     * Marketplace we present a desktop browser, then switch back to mobile once signed in.
+     */
+    const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+    fun wantsDesktop(uri: Uri): Boolean =
+        !isLoggedIn() && isFacebookHost(uri) && !uri.path.orEmpty().startsWith("/marketplace")
 
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
     const val DEBUG_TOASTS = true

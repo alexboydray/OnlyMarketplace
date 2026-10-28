@@ -36,6 +36,19 @@ class MainActivity : ComponentActivity() {
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var debugLog: TextView
     private val logLines = ArrayDeque<String>()
+    private var mobileUa = ""
+
+    /**
+     * Pick the browser identity for a URL: desktop for login/checkpoint pages while logged out,
+     * mobile everywhere else. Returns true if it changed, so the caller can reload with it.
+     */
+    private fun applyUaFor(uri: Uri): Boolean {
+        val want = if (Marketplace.wantsDesktop(uri)) Marketplace.DESKTOP_UA else mobileUa
+        if (webView.settings.userAgentString == want) return false
+        webView.settings.userAgentString = want
+        note(if (want == mobileUa) "UA → mobile" else "UA → desktop")
+        return true
+    }
 
     /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
     private fun note(msg: String) {
@@ -100,6 +113,7 @@ class MainActivity : ComponentActivity() {
             userAgentString = userAgentString
                 .replace("; wv", "")
                 .replace(Regex("""Version/\d+\.\d+\s"""), "")
+            mobileUa = userAgentString
         }
 
         // WebViews send "X-Requested-With: <package>" on every request, which is how Facebook
@@ -164,7 +178,7 @@ class MainActivity : ComponentActivity() {
             if (from == lastBounce) return // already handling this one
             lastBounce = from
             note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
-            view.post { view.stopLoading(); view.loadUrl(target) }
+            view.post { view.stopLoading(); applyUaFor(Uri.parse(target)); view.loadUrl(target) }
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
@@ -187,7 +201,11 @@ class MainActivity : ComponentActivity() {
                 return true
             }
             Marketplace.loginRedirect(url)?.let { bounce(view, url.toString(), it); return true }
-            if (Marketplace.isAllowed(url)) return false // let the WebView load it
+            if (Marketplace.isAllowed(url)) {
+                // Right identity for this page? If it changed, load it ourselves so the new one applies.
+                if (applyUaFor(url)) { view.loadUrl(url.toString()); return true }
+                return false // let the WebView load it
+            }
             bounce(view, url.toString()) // anything else bounces back to Marketplace
             return true
         }
@@ -212,16 +230,15 @@ class MainActivity : ComponentActivity() {
         override fun onPageFinished(view: WebView, url: String) {
             refresh.isRefreshing = false
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
-            val onMarketplace = Uri.parse(url).path.orEmpty().startsWith("/marketplace")
-            if (onMarketplace) {
+            val uri = Uri.parse(url)
+            // Wrong identity for where we ended up (e.g. just logged in, landed on Marketplace
+            // as "desktop")? Switch and reload so the page comes back in the right layout.
+            if (Marketplace.isFacebookHost(uri) && applyUaFor(uri)) {
+                view.postDelayed({ view.loadUrl(if (Marketplace.isLoggedIn()) Marketplace.HOME else url) }, 100)
+                return
+            }
+            if (uri.path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
-            } else if (Marketplace.isFacebookHost(Uri.parse(url))) {
-                // Login / checkpoint / consent pages: make sure the content is actually visible
-                // (see REVEAL_LOGIN_JS). Repeat a few times for steps that render late.
-                val reveal = { view.evaluateJavascript(Marketplace.REVEAL_LOGIN_JS) { note("REVEAL $it") } }
-                reveal()
-                view.postDelayed(reveal, 1500)
-                view.postDelayed(reveal, 4000)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
