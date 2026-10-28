@@ -1,6 +1,7 @@
 package com.alex.onlymarketplace
 
 import android.net.Uri
+import android.webkit.CookieManager
 
 /**
  * The rules for what the app is allowed to show. Everything that decides
@@ -9,6 +10,12 @@ import android.net.Uri
 object Marketplace {
 
     const val HOME = "https://www.facebook.com/marketplace/"
+    const val LOGIN = "https://www.facebook.com/login/?next=$HOME"
+
+    /** True once Facebook has set its logged-in user cookie. */
+    fun isLoggedIn(): Boolean =
+        CookieManager.getInstance().getCookie("https://www.facebook.com")
+            ?.contains("c_user=") == true
 
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
@@ -35,6 +42,8 @@ object Marketplace {
 
     fun isAllowed(uri: Uri): Boolean {
         val path = uri.path.orEmpty().ifEmpty { "/" }
+        // Logged-out facebook.com/ IS the login page, so let it through until there's a session.
+        if ((path == "/" || path == "/home.php") && !isLoggedIn()) return true
         if (ALLOWED_PREFIXES.any { path.startsWith(it) }) return true
         if (ALLOW_MESSAGES && MESSAGE_PREFIXES.any { path.startsWith(it) }) return true
         // Static assets (scripts, images, CDN) have their own hosts and never hit the path rules,

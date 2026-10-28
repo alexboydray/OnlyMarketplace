@@ -13,10 +13,15 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
+    private lateinit var refresh: SwipeRefreshLayout
 
     // Pending callback for a file picker opened from the page (listing photos).
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -33,7 +38,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         webView = WebView(this)
-        setContentView(webView)
+        refresh = SwipeRefreshLayout(this).apply {
+            addView(webView)
+            setColorSchemeColors(0xFF1877F2.toInt())
+            setOnRefreshListener { webView.reload() }
+        }
+        setContentView(refresh)
+
+        // Android 15 draws edge-to-edge; keep the page out from under the status/nav bars.
+        WindowCompat.getInsetsController(window, refresh).isAppearanceLightStatusBars = true
+        ViewCompat.setOnApplyWindowInsetsListener(refresh) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(0, bars.top, 0, bars.bottom)
+            insets
+        }
 
         with(webView.settings) {
             javaScriptEnabled = true
@@ -84,6 +102,13 @@ class MainActivity : ComponentActivity() {
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
+            val scheme = url.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https") {
+                // fb:// or intent:// links try to open the Facebook app. We don't want that;
+                // if it was a login attempt, show the web login page instead.
+                if (!Marketplace.isLoggedIn()) view.loadUrl(Marketplace.LOGIN)
+                return true
+            }
             if (!Marketplace.isFacebookHost(url)) {
                 // Off-site link (e.g. a seller's external website): hand it to the system browser.
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
@@ -104,6 +129,7 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            refresh.isRefreshing = false
             if (Marketplace.isFacebookHost(Uri.parse(url))) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
             }
