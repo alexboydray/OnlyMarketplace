@@ -133,11 +133,25 @@ object Marketplace {
               }
             }
           }
-          hideBar();
+          // Ads: a card with a small "Ad" / "Sponsored" label. Hide the grid cell it lives in,
+          // i.e. the closest ancestor just below the first full-width container.
+          function hideAds() {
+            var labels = Array.prototype.slice.call(document.querySelectorAll('span, div, a')).filter(function (el) {
+              return el.children.length === 0 && /^(Ad|Sponsored)$/.test(el.textContent.trim()) &&
+                     el.getBoundingClientRect().height < 32;
+            });
+            labels.forEach(function (label) {
+              var cell = label, p = label.parentElement;
+              while (p && p !== document.body && p.getBoundingClientRect().width < innerWidth * 0.9) { cell = p; p = p.parentElement; }
+              if (cell !== label && cell.getBoundingClientRect().height > 80) cell.style.setProperty('display', 'none', 'important');
+            });
+          }
+          function tidy() { hideBar(); hideAds(); }
+          tidy();
           if (!window.__omObserver) {
             window.__omObserver = new MutationObserver(function () {
               clearTimeout(window.__omTimer);
-              window.__omTimer = setTimeout(hideBar, 150);
+              window.__omTimer = setTimeout(tidy, 150);
             });
             window.__omObserver.observe(document.documentElement, { childList: true, subtree: true });
           }

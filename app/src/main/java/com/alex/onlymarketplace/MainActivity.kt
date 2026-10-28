@@ -183,6 +183,11 @@ class MainActivity : ComponentActivity() {
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
             note("START ${url.take(100)}")
+            // Belt and braces: form posts and server redirects can skip shouldOverrideUrlLoading.
+            val uri = Uri.parse(url)
+            if (Marketplace.isFacebookHost(uri) && Marketplace.loginRedirect(uri) == null && !Marketplace.isAllowed(uri)) {
+                bounce(view, url)
+            }
         }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
