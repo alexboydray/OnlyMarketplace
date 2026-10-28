@@ -174,7 +174,20 @@ object Marketplace {
             labels.forEach(function (label) {
               var cell = label, p = label.parentElement;
               while (p && p !== document.body && p.getBoundingClientRect().width < innerWidth * 0.9) { cell = p; p = p.parentElement; }
-              if (cell !== label && cell.getBoundingClientRect().height > 80) cell.style.setProperty('display', 'none', 'important');
+              if (cell !== label && cell.getBoundingClientRect().height > 80) {
+                hide(cell);
+                // Collapse the row/section the ad lived in once nothing visible is left in it,
+                // so it doesn't leave a blank gap behind.
+                var c = cell.parentElement;
+                while (c && c !== document.body) {
+                  var visibleKids = Array.prototype.filter.call(c.children, function (k) {
+                    return getComputedStyle(k).display !== 'none' && k.getBoundingClientRect().height > 0;
+                  });
+                  if (visibleKids.length > 0) break;
+                  hide(c);
+                  c = c.parentElement;
+                }
+              }
             });
           }
           function tidy() { hideBar(); hideAds(); }
