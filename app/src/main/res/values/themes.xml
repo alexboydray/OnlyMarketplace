@@ -5,6 +5,7 @@
         <!-- Android 15 forces edge-to-edge; opt out so the status bar stays a normal solid bar. -->
         <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
         <item name="android:statusBarColor">#1877F2</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#1877F2</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>
