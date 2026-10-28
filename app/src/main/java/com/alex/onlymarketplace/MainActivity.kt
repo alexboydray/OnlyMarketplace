@@ -258,8 +258,13 @@ class MainActivity : ComponentActivity() {
             view.postDelayed({
                 val now = Uri.parse(view.url ?: "")
                 if (Marketplace.isAllowed(now)) { view.visibility = View.VISIBLE; return@postDelayed }
-                view.evaluateJavascript("(function(){var a=document.activeElement;return !!(a&&a.tagName==='INPUT')})()") { r ->
-                    if (r == "true") { note("search UI at ${now.path}, allowed"); view.visibility = View.VISIBLE }
+                // Overlays (photo viewer, search) keep the underlying page's title; the real
+                // feed/login pages are titled just "Facebook" / "Log into Facebook".
+                view.evaluateJavascript(
+                    "(function(){var a=document.activeElement;var t=(document.title||'').trim();" +
+                    "return ((a&&a.tagName==='INPUT')||!/^(Facebook|Log into Facebook|Facebook - log in or sign up)$/i.test(t))?'keep:'+t:'bounce:'+t})()"
+                ) { r ->
+                    if (r.startsWith("\"keep")) { note("overlay at ${now.path} kept ($r)"); view.visibility = View.VISIBLE }
                     else bounce(view, now.toString())
                 }
             }, 350)

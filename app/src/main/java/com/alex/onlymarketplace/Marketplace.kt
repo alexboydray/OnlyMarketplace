@@ -66,7 +66,7 @@ object Marketplace {
           return document.title.slice(0, 24) + ' | op=' + cs.opacity + ' vis=' + cs.visibility +
             ' w=' + innerWidth + ' h=' + document.documentElement.scrollHeight + ' sy=' + scrollY +
             ' input@' + (r ? Math.round(r.top) + ',' + Math.round(r.left) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) : 'none') +
-            ' | ' + b.innerText.slice(0, 70).replace(/\s+/g, ' ');
+            ' | top=' + (window.__omTop || '-');
         })()
     """.trimIndent()
 
@@ -198,18 +198,21 @@ object Marketplace {
           // below it says "Marketplace", so that one survives).
           function hideTopBarByPoint() {
             if (scrollY > 2) return;
-            var xs = [innerWidth * 0.1, innerWidth * 0.5, innerWidth * 0.9];
+            var xs = [innerWidth * 0.1, innerWidth * 0.5, innerWidth * 0.9], report = [];
             for (var k = 0; k < xs.length; k++) {
               var el = document.elementFromPoint(xs[k], 25);
               while (el && el !== document.body) {
                 var r = el.getBoundingClientRect();
+                if (k === 0) report.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' t=' + el.textContent.replace(/\s+/g, '').length);
                 if (r.width >= innerWidth * 0.9 && r.height >= 40 && r.height <= 130) {
-                  if (GLYPHS_ONLY.test(el.textContent)) hide(el);
+                  if (GLYPHS_ONLY.test(el.textContent)) { hide(el); if (k === 0) report.push('HID'); }
+                  else if (k === 0) report.push('TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
                   break;
                 }
                 el = el.parentElement;
               }
             }
+            window.__omTop = report.join(' < ');
           }
           function depthOf(el) { var d = 0; while (el && el !== document.body && d < 9) { el = el.parentElement; d++; } return d; }
           function scan(root) {
