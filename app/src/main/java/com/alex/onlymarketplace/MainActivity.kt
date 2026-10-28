@@ -9,6 +9,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -159,10 +160,19 @@ class MainActivity : ComponentActivity() {
             if (request.isForMainFrame) note("Load error ${error.errorCode}: ${request.url}")
         }
 
+        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+            if (request.isForMainFrame) note("HTTP ${response.statusCode}: ${request.url}")
+        }
+
         override fun onPageFinished(view: WebView, url: String) {
             refresh.isRefreshing = false
             if (Marketplace.isFacebookHost(Uri.parse(url))) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
+            }
+            if (Marketplace.DEBUG_TOASTS) {
+                view.evaluateJavascript(
+                    "document.title + ' | ' + location.href + ' | ' + (document.body ? document.body.innerText.length : -1) + ' chars'"
+                ) { note("Page: $it") }
             }
         }
     }
