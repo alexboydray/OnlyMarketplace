@@ -176,6 +176,7 @@ class MainActivity : ComponentActivity() {
 
         private var lastBounce = ""
         private var lastBounceAt = 0L
+        private val recentBounces = ArrayDeque<Long>()
 
         /** Send the view back to Marketplace. Posted so it never collides with the navigation that triggered it. */
         private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
@@ -183,10 +184,26 @@ class MainActivity : ComponentActivity() {
             if (from == lastBounce && now - lastBounceAt < 1000) return // same navigation firing twice
             lastBounce = from
             lastBounceAt = now
+
+            // Loop guard: Marketplace itself keeps redirecting to "/" → the session is dead on
+            // Facebook's side but the cookie is still here. Forget it and go to the login form.
+            recentBounces.addLast(now)
+            while (recentBounces.size > 0 && now - recentBounces.first() > 15000) recentBounces.removeFirst()
+            if (target == Marketplace.HOME && recentBounces.size >= 4 && Uri.parse(from).path.orEmpty().trimEnd('/').isEmpty()) {
+                recentBounces.clear()
+                Marketplace.forgetSession()
+                Toast.makeText(this@MainActivity, "Facebook session expired — please log in again", Toast.LENGTH_LONG).show()
+                note("LOOP → forgetting session, going to login")
+                view.visibility = View.VISIBLE
+                applyUaFor(Uri.parse(Marketplace.LOGIN))
+                view.loadUrl(Marketplace.LOGIN)
+                return
+            }
             note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
             if (target == Marketplace.HOME) {
                 // Always-on, so a wrongly blocked page is easy to report (it shows the path).
-                Toast.makeText(this@MainActivity, "Blocked: ${Uri.parse(from).path}", Toast.LENGTH_SHORT).show()
+                val u = Uri.parse(from)
+                Toast.makeText(this@MainActivity, "Blocked: ${u.host}${u.path}", Toast.LENGTH_SHORT).show()
             }
             // Cover the view so the blocked page never flashes; onPageFinished uncovers it.
             view.visibility = View.INVISIBLE

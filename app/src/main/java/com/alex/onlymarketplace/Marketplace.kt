@@ -9,13 +9,29 @@ import android.webkit.CookieManager
  */
 object Marketplace {
 
-    const val HOME = "https://www.facebook.com/marketplace/"
+    const val HOME = "https://m.facebook.com/marketplace/"
     const val LOGIN = "https://www.facebook.com/login/?next=$HOME"
 
     /** True once Facebook has set its logged-in user cookie. */
     fun isLoggedIn(): Boolean =
         CookieManager.getInstance().getCookie("https://www.facebook.com")
             ?.contains("c_user=") == true
+
+    /**
+     * Facebook's session can expire server-side while the login cookie is still on the phone.
+     * Then Marketplace keeps redirecting to "/" (the login page) and we keep blocking it.
+     * Clearing the session cookies makes [isLoggedIn] false so the login page is allowed again.
+     */
+    fun forgetSession() {
+        val cm = CookieManager.getInstance()
+        for (host in listOf("https://www.facebook.com", "https://m.facebook.com", "https://facebook.com")) {
+            for (name in listOf("c_user", "xs", "fr", "presence")) {
+                cm.setCookie(host, "$name=; Max-Age=0; Path=/; Domain=.facebook.com")
+                cm.setCookie(host, "$name=; Max-Age=0; Path=/")
+            }
+        }
+        cm.flush()
+    }
 
     /**
      * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
@@ -38,7 +54,7 @@ object Marketplace {
         !isLoggedIn() && isFacebookHost(uri) && !uri.path.orEmpty().startsWith("/marketplace")
 
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
-    const val DEBUG_TOASTS = false
+    const val DEBUG_TOASTS = true
 
     /** One-line page report for the debug strip: is the content there, visible, and on screen? */
     val DIAG_JS = """
