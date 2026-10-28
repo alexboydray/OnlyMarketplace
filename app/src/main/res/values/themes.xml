@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OnlyMarketplace" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:statusBarColor">#1877F2</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+    </style>
+</resources>
