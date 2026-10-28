@@ -57,7 +57,21 @@ object Marketplace {
      */
     val REVEAL_LOGIN_JS = """
         (function () {
-          var i = document.querySelector('input'); if (!i) return 'no input';
+          // Wrappers that collapsed to (near) zero height with overflow hidden swallow the whole
+          // page. Facebook's script normally sizes them; when it crashes, they stay collapsed.
+          var opened = [];
+          document.querySelectorAll('body, body *').forEach(function (el) {
+            var s = getComputedStyle(el);
+            var clips = /hidden|clip/.test(s.overflow + s.overflowY);
+            if (clips && el.clientHeight < 40 && el.scrollHeight > el.clientHeight + 40) {
+              opened.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + el.clientHeight + '/' + el.scrollHeight);
+              el.style.setProperty('overflow', 'visible', 'important');
+              el.style.setProperty('height', 'auto', 'important');
+              el.style.setProperty('min-height', '0', 'important');
+            }
+          });
+          var i = document.querySelector('input, iframe, button, [role=button]');
+          if (!i) return 'opened=[' + opened.join(' | ') + '] no anchor element';
           var found = [], e = i;
           while (e && e !== document) {
             var s = getComputedStyle(e);
@@ -104,7 +118,7 @@ object Marketplace {
             var ks = getComputedStyle(k), kr = k.getBoundingClientRect();
             return k.tagName + (k.id ? '#' + k.id : '') + ':' + ks.position + ' ' + Math.round(kr.width) + 'x' + Math.round(kr.height) + ' ' + ks.backgroundColor;
           });
-          return 'hidden=[' + found.join(' > ') + '] overlays=[' + killed.join(' | ') + '] clipped=[' + clipped.join(' | ') + '] body>' + kids.join(', ');
+          return 'opened=[' + opened.join(' | ') + '] hidden=[' + found.join(' > ') + '] overlays=[' + killed.join(' | ') + '] clipped=[' + clipped.join(' | ') + '] body>' + kids.join(', ');
         })()
     """.trimIndent()
 

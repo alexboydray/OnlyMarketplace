@@ -215,11 +215,13 @@ class MainActivity : ComponentActivity() {
             val onMarketplace = Uri.parse(url).path.orEmpty().startsWith("/marketplace")
             if (onMarketplace) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
-            } else if (!Marketplace.isLoggedIn()) {
-                // Login/consent pages: make sure the form is actually visible (see REVEAL_LOGIN_JS).
+            } else if (Marketplace.isFacebookHost(Uri.parse(url))) {
+                // Login / checkpoint / consent pages: make sure the content is actually visible
+                // (see REVEAL_LOGIN_JS). Repeat a few times for steps that render late.
                 val reveal = { view.evaluateJavascript(Marketplace.REVEAL_LOGIN_JS) { note("REVEAL $it") } }
                 reveal()
                 view.postDelayed(reveal, 1500)
+                view.postDelayed(reveal, 4000)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
