@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
     private fun note(msg: String) {
         if (!Marketplace.DEBUG_TOASTS) return
-        logLines.addLast(msg.take(420))
+        logLines.addLast(msg.take(1200))
         while (logLines.size > 8) logLines.removeFirst()
         debugLog.text = logLines.joinToString("\n")
     }

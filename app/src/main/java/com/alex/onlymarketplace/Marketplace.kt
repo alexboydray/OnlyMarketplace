@@ -57,68 +57,48 @@ object Marketplace {
      */
     val REVEAL_LOGIN_JS = """
         (function () {
-          // Wrappers that collapsed to (near) zero height with overflow hidden swallow the whole
-          // page. Facebook's script normally sizes them; when it crashes, they stay collapsed.
-          var opened = [];
-          document.querySelectorAll('body, body *').forEach(function (el) {
-            var s = getComputedStyle(el);
-            var clips = /hidden|clip/.test(s.overflow + s.overflowY);
-            if (clips && el.clientHeight < 40 && el.scrollHeight > el.clientHeight + 40) {
-              opened.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + el.clientHeight + '/' + el.scrollHeight);
-              el.style.setProperty('overflow', 'visible', 'important');
-              el.style.setProperty('height', 'auto', 'important');
-              el.style.setProperty('min-height', '0', 'important');
-            }
-          });
           var i = document.querySelector('input, iframe, button, [role=button]');
-          if (!i) return 'opened=[' + opened.join(' | ') + '] no anchor element';
-          var found = [], e = i;
-          while (e && e !== document) {
-            var s = getComputedStyle(e);
-            var bad = (s.visibility !== 'visible' ? 'vis=' + s.visibility : '') +
-                      (s.opacity === '0' ? ' op=0' : '') +
-                      (s.display === 'none' ? ' display=none' : '') +
-                      (s.clipPath !== 'none' ? ' clip' : '') +
-                      (s.transform !== 'none' ? ' tf' : '');
-            if (bad) {
-              found.push(e.tagName + (e.id ? '#' + e.id : '') + '[' + bad.trim() + ']');
-              e.style.setProperty('visibility', 'visible', 'important');
-              e.style.setProperty('opacity', '1', 'important');
-              e.style.setProperty('display', e.tagName === 'INPUT' ? 'inline-block' : 'block', 'important');
-              e.style.setProperty('transform', 'none', 'important');
-              e.style.setProperty('clip-path', 'none', 'important');
-            }
+          if (!i) return 'no anchor';
+          // Brute force: on every ancestor of the form, reset every property that can clip,
+          // collapse or hide it, and record what each one looked like before.
+          var chain = [], e = i;
+          while (e && e.nodeType === 1) {
+            var s = getComputedStyle(e), r = e.getBoundingClientRect();
+            chain.push(e.tagName + (e.id ? '#' + e.id : '') + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) +
+              ' ov=' + s.overflow + ' ct=' + s.contain + ' cv=' + s.contentVisibility + ' cl=' + s.clip +
+              ' pos=' + s.position + ' vis=' + s.visibility + ' op=' + s.opacity + ' mh=' + s.maxHeight + ' d=' + s.display);
+            var st = e.style;
+            st.setProperty('overflow', 'visible', 'important');
+            st.setProperty('contain', 'none', 'important');
+            st.setProperty('content-visibility', 'visible', 'important');
+            st.setProperty('clip', 'auto', 'important');
+            st.setProperty('clip-path', 'none', 'important');
+            st.setProperty('max-height', 'none', 'important');
+            st.setProperty('visibility', 'visible', 'important');
+            st.setProperty('opacity', '1', 'important');
+            st.setProperty('transform', 'none', 'important');
+            st.setProperty('filter', 'none', 'important');
+            if (s.display === 'none') st.setProperty('display', 'block', 'important');
+            if (r.height < 40 && e !== i && e.tagName !== 'HTML') st.setProperty('height', 'auto', 'important');
             e = e.parentElement;
           }
           // Full-viewport fixed/absolute elements that don't contain the form are overlays
           // (splash screens, loaders). Hit-testing ignores them when pointer-events is none.
           var killed = [];
           document.querySelectorAll('body *').forEach(function (el) {
-            if (el.contains(i)) return;
+            if (el === i || el.contains(i) || i.contains(el)) return;
             var s = getComputedStyle(el);
             if (s.position !== 'fixed' && s.position !== 'absolute') return;
             var r = el.getBoundingClientRect();
             if (r.width >= innerWidth * 0.85 && r.height >= innerHeight * 0.6) {
-              killed.push(el.tagName + (el.id ? '#' + el.id : '') + '.' + String(el.className).slice(0, 20) +
-                ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' bg=' + s.backgroundColor + ' pe=' + s.pointerEvents + ' z=' + s.zIndex);
+              killed.push(el.tagName + (el.id ? '#' + el.id : '') + ' bg=' + s.backgroundColor + ' z=' + s.zIndex);
               el.style.setProperty('display', 'none', 'important');
             }
           });
-          // Ancestors that clip (overflow hidden) to a box smaller than the input's position.
-          var clipped = [];
-          var ir = i.getBoundingClientRect();
-          for (e = i.parentElement; e && e !== document.body; e = e.parentElement) {
-            var cs = getComputedStyle(e), cr = e.getBoundingClientRect();
-            if (cs.overflow !== 'visible' && (cr.height < 40 || cr.width < 40 || cr.bottom < ir.top)) {
-              clipped.push(e.tagName + (e.id ? '#' + e.id : '') + ' ' + Math.round(cr.width) + 'x' + Math.round(cr.height));
-              e.style.setProperty('overflow', 'visible', 'important');
-            }
-          }
-          var kids = Array.prototype.slice.call(document.body.children, 0, 6).map(function (k) {
-            var ks = getComputedStyle(k), kr = k.getBoundingClientRect();
-            return k.tagName + (k.id ? '#' + k.id : '') + ':' + ks.position + ' ' + Math.round(kr.width) + 'x' + Math.round(kr.height) + ' ' + ks.backgroundColor;
-          });
-          return 'opened=[' + opened.join(' | ') + '] hidden=[' + found.join(' > ') + '] overlays=[' + killed.join(' | ') + '] clipped=[' + clipped.join(' | ') + '] body>' + kids.join(', ');
+          var cv = i.checkVisibility ? i.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) : 'n/a';
+          var r2 = i.getBoundingClientRect();
+          return 'visible=' + cv + ' anchor=' + i.tagName + '@' + Math.round(r2.top) + ',' + Math.round(r2.left) +
+            ' killed=[' + killed.join(' | ') + '] chain=' + chain.join(' < ');
         })()
     """.trimIndent()
 
