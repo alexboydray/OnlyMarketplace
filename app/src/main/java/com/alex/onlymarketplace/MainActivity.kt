@@ -19,6 +19,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 
 class MainActivity : ComponentActivity() {
 
@@ -70,6 +72,12 @@ class MainActivity : ComponentActivity() {
                 .replace(Regex("""Version/\d+\.\d+\s"""), "")
         }
 
+        // WebViews send "X-Requested-With: <package>" on every request, which is how Facebook
+        // spots in-app browsers and forces the "log in via the Facebook app" page. Drop it.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(webView.settings, emptySet())
+        }
+
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
@@ -113,7 +121,7 @@ class MainActivity : ComponentActivity() {
         private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
             if (from == lastBounce) return // already handling this one
             lastBounce = from
-            note("Blocked: $from")
+            note(if (target == Marketplace.HOME) "Blocked: $from" else "Redirecting to login (v${BuildConfig.VERSION_NAME})")
             view.post { view.loadUrl(target) }
         }
 

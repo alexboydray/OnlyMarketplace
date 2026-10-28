@@ -21,8 +21,14 @@ object Marketplace {
      * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
      * hand off to the native app. Skip it and go straight to the web login form instead.
      */
+    private var loginRedirectTried = false
+
     fun loginRedirect(uri: Uri): String? {
         if (!uri.path.orEmpty().startsWith("/unified/login_via")) return null
+        // Only try the shortcut once. If Facebook sends us straight back here, let the
+        // interstitial load instead; it has a "log in in browser" option.
+        if (loginRedirectTried) return null
+        loginRedirectTried = true
         val next = uri.getQueryParameter("next") ?: HOME
         return "https://www.facebook.com/login/?next=" + Uri.encode(next)
     }
@@ -39,7 +45,7 @@ object Marketplace {
     private val ALLOWED_PREFIXES = listOf(
         "/marketplace",
         // Login, 2FA, account checkpoints, password recovery
-        "/login", "/checkpoint", "/two_step_verification", "/recover", "/auth", "/x/",
+        "/login", "/checkpoint", "/two_step_verification", "/recover", "/auth", "/x/", "/unified",
         // Consent / cookie / policy pages Facebook can force you through
         "/privacy", "/cookie", "/security", "/legal", "/policies", "/help", "/dialog",
         // Lets you sign out from the profile menu
