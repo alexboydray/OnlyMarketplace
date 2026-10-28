@@ -19,6 +19,7 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -172,11 +173,14 @@ class MainActivity : ComponentActivity() {
     private inner class MarketplaceClient : WebViewClient() {
 
         private var lastBounce = ""
+        private var lastBounceAt = 0L
 
         /** Send the view back to Marketplace. Posted so it never collides with the navigation that triggered it. */
         private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
-            if (from == lastBounce) return // already handling this one
+            val now = System.currentTimeMillis()
+            if (from == lastBounce && now - lastBounceAt < 1000) return // same navigation firing twice
             lastBounce = from
+            lastBounceAt = now
             note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
             view.post { view.stopLoading(); applyUaFor(Uri.parse(target)); view.loadUrl(target) }
         }
@@ -202,6 +206,7 @@ class MainActivity : ComponentActivity() {
             }
             if (!Marketplace.isFacebookHost(url)) {
                 // Off-site link (e.g. a seller's external website): hand it to the system browser.
+                Toast.makeText(this@MainActivity, "Opening ${url.host} outside the app", Toast.LENGTH_SHORT).show()
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
                 return true
             }

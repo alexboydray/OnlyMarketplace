@@ -57,7 +57,9 @@ object Marketplace {
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
 
-    private val FACEBOOK_HOSTS = listOf("facebook.com", "fb.com", "fbcdn.net", "fbsbx.com")
+    // fb.me / fb.watch are Facebook's short links; keep them in the WebView so Android can't
+    // deep-link them into the Facebook app. They redirect to facebook.com and hit the lock.
+    private val FACEBOOK_HOSTS = listOf("facebook.com", "fb.com", "fb.me", "fb.watch", "fbcdn.net", "fbsbx.com")
 
     /** Path prefixes that may load. Everything else on facebook.com bounces to [HOME]. */
     private val ALLOWED_PREFIXES = listOf(
