@@ -13,7 +13,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +26,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 
@@ -28,6 +34,16 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
     private lateinit var refresh: SwipeRefreshLayout
+    private lateinit var debugLog: TextView
+    private val logLines = ArrayDeque<String>()
+
+    /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
+    private fun note(msg: String) {
+        if (!Marketplace.DEBUG_TOASTS) return
+        logLines.addLast(msg.take(200))
+        while (logLines.size > 8) logLines.removeFirst()
+        debugLog.text = logLines.joinToString("\n")
+    }
 
     // Pending callback for a file picker opened from the page (listing photos).
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -50,11 +66,23 @@ class MainActivity : ComponentActivity() {
             setDistanceToTriggerSync(300) // needs a deliberate pull, not a flick
             setOnRefreshListener { webView.reload() }
         }
-        setContentView(refresh)
+        debugLog = TextView(this).apply {
+            setBackgroundColor(0xCC000000.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 11f
+            setPadding(24, 12, 24, 12)
+            visibility = if (Marketplace.DEBUG_TOASTS) View.VISIBLE else View.GONE
+            setOnClickListener { logLines.clear(); text = "" }
+        }
+        val root = FrameLayout(this).apply {
+            addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            addView(debugLog, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
+        }
+        setContentView(root)
 
         // Android 15 draws edge-to-edge; keep the page out from under the status/nav bars.
-        WindowCompat.getInsetsController(window, refresh).isAppearanceLightStatusBars = true
-        ViewCompat.setOnApplyWindowInsetsListener(refresh) { v, insets ->
+        WindowCompat.getInsetsController(window, root).isAppearanceLightStatusBars = true
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(0, bars.top, 0, bars.bottom)
             insets
@@ -78,6 +106,22 @@ class MainActivity : ComponentActivity() {
         // spots in-app browsers and forces the "log in via the Facebook app" page. Drop it.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
             WebSettingsCompat.setRequestedWithHeaderOriginAllowList(webView.settings, emptySet())
+        }
+
+        // Client hints (Sec-CH-UA) also announce "Android WebView" regardless of the UA string.
+        // Present the same brands Chrome does.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+            val major = Regex("""Chrome/(\d+)""").find(webView.settings.userAgentString)?.groupValues?.get(1) ?: "131"
+            val brands = listOf("Chromium", "Google Chrome", "Not_A Brand").map { b ->
+                val v = if (b == "Not_A Brand") "24" else major
+                UserAgentMetadata.BrandVersion.Builder().setBrand(b).setMajorVersion(v).setFullVersion("$v.0.0.0").build()
+            }
+            val meta = UserAgentMetadata.Builder()
+                .setBrandVersionList(brands)
+                .setPlatform("Android")
+                .setMobile(true)
+                .build()
+            WebSettingsCompat.setUserAgentMetadata(webView.settings, meta)
         }
 
         CookieManager.getInstance().apply {
@@ -115,16 +159,16 @@ class MainActivity : ComponentActivity() {
 
         private var lastBounce = ""
 
-        private fun note(msg: String) {
-            if (Marketplace.DEBUG_TOASTS) Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-        }
-
         /** Send the view back to Marketplace. Posted so it never collides with the navigation that triggered it. */
         private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
             if (from == lastBounce) return // already handling this one
             lastBounce = from
-            note(if (target == Marketplace.HOME) "Blocked: $from" else "Redirecting to login (v${BuildConfig.VERSION_NAME})")
-            view.post { view.loadUrl(target) }
+            note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
+            view.post { view.stopLoading(); view.loadUrl(target) }
+        }
+
+        override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+            note("START ${url.take(100)}")
         }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -172,8 +216,8 @@ class MainActivity : ComponentActivity() {
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(
-                    "(document.body ? document.body.innerText.length : -1) + ' chars, ' + document.querySelectorAll('input').length + ' inputs | ' + document.title"
-                ) { note("Page: $it") }
+                    "(document.body ? document.body.innerText.length : -1) + 'ch ' + document.querySelectorAll('input').length + 'in dlg=' + !!document.querySelector('[role=dialog]') + ' ' + document.title.slice(0,30) + ' @ ' + location.href.slice(0,70)"
+                ) { note("DONE $it") }
             }
         }
     }
@@ -185,7 +229,7 @@ class MainActivity : ComponentActivity() {
         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
             if (Marketplace.DEBUG_TOASTS && msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR && jsErrorsShown < 3) {
                 jsErrorsShown++
-                Toast.makeText(this@MainActivity, "JS: ${msg.message().take(120)}", Toast.LENGTH_LONG).show()
+                note("JS ${msg.message().take(120)}")
             }
             return false
         }
