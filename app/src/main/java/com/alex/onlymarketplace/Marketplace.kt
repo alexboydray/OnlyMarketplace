@@ -17,6 +17,16 @@ object Marketplace {
         CookieManager.getInstance().getCookie("https://www.facebook.com")
             ?.contains("c_user=") == true
 
+    /**
+     * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
+     * hand off to the native app. Skip it and go straight to the web login form instead.
+     */
+    fun loginRedirect(uri: Uri): String? {
+        if (!uri.path.orEmpty().startsWith("/unified/login_via")) return null
+        val next = uri.getQueryParameter("next") ?: HOME
+        return "https://www.facebook.com/login/?next=" + Uri.encode(next)
+    }
+
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
     const val DEBUG_TOASTS = true
 

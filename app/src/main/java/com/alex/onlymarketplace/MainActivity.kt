@@ -132,6 +132,7 @@ class MainActivity : ComponentActivity() {
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
                 return true
             }
+            Marketplace.loginRedirect(url)?.let { bounce(view, url.toString(), it); return true }
             if (Marketplace.isAllowed(url)) return false // let the WebView load it
             bounce(view, url.toString()) // anything else bounces back to Marketplace
             return true
@@ -141,7 +142,9 @@ class MainActivity : ComponentActivity() {
         // reaches shouldOverrideUrlLoading. This hook fires for those, so we re-check here too.
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             val uri = Uri.parse(url)
-            if (Marketplace.isFacebookHost(uri) && !Marketplace.isAllowed(uri)) bounce(view, url)
+            if (!Marketplace.isFacebookHost(uri)) return
+            Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
+            if (!Marketplace.isAllowed(uri)) bounce(view, url)
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
