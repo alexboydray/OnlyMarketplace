@@ -176,8 +176,27 @@ object Marketplace {
             }
             hide(box);
           }
+          // The nav bar's icons are font glyphs (private-use characters), so its text is only
+          // glyphs, badge digits and "+". A full-width strip 40–130px tall with that kind of
+          // text and a handful of tappable children is the bar. Only checked near the top of the
+          // tree (bars live there) so it stays cheap.
+          var GLYPHS_ONLY = /^[\d+\s•-]*$/;
+          function hideStrip(root) {
+            var els = root.querySelectorAll('div, nav, header');
+            for (var i = 0; i < els.length; i++) {
+              var el = els[i];
+              if (el.childElementCount === 0 || el.querySelectorAll('*').length > 120) continue;
+              if (!GLYPHS_ONLY.test(el.textContent)) continue;
+              if (el.querySelectorAll('a, [role=button], [role=link], svg, i, span').length < 4) continue;
+              var r = el.getBoundingClientRect();
+              if (r.width < innerWidth * 0.9 || r.height < 40 || r.height > 130) continue;
+              hide(el);
+            }
+          }
+          function depthOf(el) { var d = 0; while (el && el !== document.body && d < 9) { el = el.parentElement; d++; } return d; }
           function scan(root) {
             if (!root || root.nodeType !== 1) return;
+            if (depthOf(root) <= 5) hideStrip(root);
             var icons = [];
             if (isNavIcon(root)) icons.push(root);
             var all = root.querySelectorAll('a[href], [aria-label], span, div, button, [role=button]');

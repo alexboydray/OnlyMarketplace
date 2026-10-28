@@ -251,7 +251,18 @@ class MainActivity : ComponentActivity() {
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
-            if (!Marketplace.isAllowed(uri)) bounce(view, url)
+            if (Marketplace.isAllowed(uri)) return
+            // In-page address changes can be transient (the search overlay briefly sets "/").
+            // Cover the view, give it a beat, then decide from what's actually on screen.
+            view.visibility = View.INVISIBLE
+            view.postDelayed({
+                val now = Uri.parse(view.url ?: "")
+                if (Marketplace.isAllowed(now)) { view.visibility = View.VISIBLE; return@postDelayed }
+                view.evaluateJavascript("(function(){var a=document.activeElement;return !!(a&&a.tagName==='INPUT')})()") { r ->
+                    if (r == "true") { note("search UI at ${now.path}, allowed"); view.visibility = View.VISIBLE }
+                    else bounce(view, now.toString())
+                }
+            }, 350)
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
