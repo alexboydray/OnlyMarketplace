@@ -28,20 +28,6 @@ object Marketplace {
     }
 
     /**
-     * Searching from the Marketplace home page goes through Facebook's general search URL
-     * (/search/...). Keep it if it's a Marketplace search; otherwise turn it into one.
-     */
-    fun searchRedirect(uri: Uri): String? {
-        if (!uri.path.orEmpty().startsWith("/search")) return null
-        if (uri.toString().contains("marketplace", ignoreCase = true)) return null // already Marketplace
-        val q = uri.getQueryParameter("q") ?: uri.getQueryParameter("query") ?: return HOME
-        return "https://www.facebook.com/marketplace/search/?query=" + Uri.encode(q)
-    }
-
-    fun isMarketplaceSearch(uri: Uri): Boolean =
-        uri.path.orEmpty().startsWith("/search") && uri.toString().contains("marketplace", ignoreCase = true)
-
-    /**
      * Facebook's mobile login page relies on a script that crashes inside a WebView and leaves
      * the page collapsed. The desktop login page is a plain form, so while logged out and off
      * Marketplace we present a desktop browser, then switch back to mobile once signed in.
@@ -78,6 +64,8 @@ object Marketplace {
     /** Path prefixes that may load. Everything else on facebook.com bounces to [HOME]. */
     private val ALLOWED_PREFIXES = listOf(
         "/marketplace",
+        // Reached from inside Marketplace: the search box, and the full-screen photo viewer
+        "/search", "/photo",
         // Login, 2FA, account checkpoints, password recovery
         "/login", "/checkpoint", "/two_step_verification", "/recover", "/auth", "/x/", "/unified",
         // Consent / cookie / policy pages Facebook can force you through
@@ -97,7 +85,6 @@ object Marketplace {
         val path = uri.path.orEmpty().ifEmpty { "/" }
         // Logged-out facebook.com/ IS the login page, so let it through until there's a session.
         if ((path == "/" || path == "/home.php") && !isLoggedIn()) return true
-        if (isMarketplaceSearch(uri)) return true
         if (ALLOWED_PREFIXES.any { path.startsWith(it) }) return true
         if (ALLOW_MESSAGES && MESSAGE_PREFIXES.any { path.startsWith(it) }) return true
         // Static assets (scripts, images, CDN) have their own hosts and never hit the path rules,
@@ -127,78 +114,86 @@ object Marketplace {
             style.textContent = css;
             (document.head || document.documentElement).appendChild(style);
           }
-          // Paths that belong to Facebook's main nav, not Marketplace.
+          // Everything below is incremental: the whole page is scanned once, then only the
+          // nodes Facebook adds afterwards (infinite scroll). Text is checked before anything is
+          // measured, because measuring forces layout and that is what made scrolling crawl.
+          if (window.__omScan) { window.__omScan(document.body); return; }
+
           var NAV = /^\/(\?|home\.php|friends|notifications|watch|reel|video|groups|gaming|bookmarks|menu)?(\/|\?|$)/;
+          var ICON = /^(Home|Friends|Messenger|Messages|Video|Reels|Watch|Notifications|Menu)(,|$)/;
+          var UPSELL = /^(Open app|Open in app|Use app|Get app)$/i;
           function pathOf(a) { try { var u = new URL(a.getAttribute('href'), location.href); return u.pathname + u.search; } catch (e) { return ''; } }
-          function hide(el) { el.style.setProperty('display', 'none', 'important'); }
-          function hideBar() {
-            // 1. Individual nav links (href-based) and labelled icon buttons.
-            var LABELS = /^(Home|Friends|Messenger|Messages|Video|Reels|Watch|Notifications|Menu)$/;
-            Array.prototype.slice.call(document.querySelectorAll('a[href], [aria-label]')).forEach(function (el) {
-              var p = el.getAttribute('href') ? pathOf(el) : '';
-              var lbl = el.getAttribute('aria-label') || '';
-              if (p === '/' || NAV.test(p) || (LABELS.test(lbl) && el.getBoundingClientRect().width < innerWidth * 0.4)) hide(el);
-            });
-            // 2. The bar itself: a full-width strip, 40–130px tall, whose only text is badge
-            //    counts ("15+", "6") and which holds several icon buttons. Marketplace's own
-            //    header has real words in it, so it never matches.
-            Array.prototype.slice.call(document.querySelectorAll('div, nav, header')).forEach(function (el) {
-              var r = el.getBoundingClientRect();
-              if (r.width < innerWidth * 0.9 || r.height < 40 || r.height > 130) return;
-              if (el.innerText.replace(/[\d+\s]/g, '') !== '') return;
-              if (el.querySelectorAll('a, [role=button], [role=link], svg').length < 3) return;
-              // Only the outermost such strip (skip if a parent already qualifies).
-              var pr = el.parentElement ? el.parentElement.getBoundingClientRect() : null;
-              if (pr && pr.height <= 130 && el.parentElement.innerText.replace(/[\d+\s]/g, '') === '' && el.parentElement !== document.body) return;
-              hide(el);
-            });
-            // 3. Facebook's "Open app" upsell button and the strip it sits in.
-            Array.prototype.slice.call(document.querySelectorAll('a, button, [role=button]')).forEach(function (el) {
-              if (!/^(Open app|Open in app|Use app|Get app)$/i.test(el.innerText.trim())) return;
-              var box = el, p = el.parentElement;
-              while (p && p !== document.body) {
-                var pos = getComputedStyle(p).position;
-                if (pos === 'fixed' || pos === 'sticky') { box = p; break; }
-                p = p.parentElement;
+          function hide(el) { if (el && el.style.display !== 'none') el.style.setProperty('display', 'none', 'important'); }
+          function isNavLink(el) { var h = el.getAttribute('href'); if (!h) return false; var p = pathOf(el); return p === '/' || NAV.test(p); }
+          function isNavIcon(el) { var l = el.getAttribute('aria-label'); return !!l && ICON.test(l); }
+
+          // The bar is the smallest box holding the first and last nav icons we found.
+          function hideBarAround(icons) {
+            if (icons.length < 2) return;
+            var a = icons[0], b = icons[icons.length - 1], box = a.parentElement;
+            while (box && box !== document.body && !box.contains(b)) box = box.parentElement;
+            if (box && box !== document.body && box.getBoundingClientRect().height < 200) hide(box);
+          }
+          // Ad card: climb to the grid cell (last ancestor narrower than the page), hide it,
+          // then collapse any wrapper left with nothing visible so there is no gap.
+          function hideAdCell(label) {
+            var cell = label, p = label.parentElement;
+            while (p && p !== document.body && p.getBoundingClientRect().width < innerWidth * 0.9) { cell = p; p = p.parentElement; }
+            if (cell === label || cell.getBoundingClientRect().height < 80) return;
+            hide(cell);
+            var c = cell.parentElement;
+            while (c && c !== document.body) {
+              var visible = Array.prototype.some.call(c.children, function (k) {
+                return k.style.display !== 'none' && k.getBoundingClientRect().height > 0;
+              });
+              if (visible) break;
+              hide(c); c = c.parentElement;
+            }
+          }
+          // "Open app" upsell: hide the fixed/sticky strip it sits in.
+          function hideUpsell(el) {
+            var box = el, p = el.parentElement;
+            while (p && p !== document.body) {
+              var pos = getComputedStyle(p).position;
+              if (pos === 'fixed' || pos === 'sticky') { box = p; break; }
+              p = p.parentElement;
+            }
+            hide(box);
+          }
+          function scan(root) {
+            if (!root || root.nodeType !== 1) return;
+            var icons = [];
+            if (isNavIcon(root)) icons.push(root);
+            var all = root.querySelectorAll('a[href], [aria-label], span, div, button, [role=button]');
+            for (var i = 0; i < all.length; i++) {
+              var el = all[i];
+              if (isNavIcon(el)) { icons.push(el); hide(el); continue; }
+              if (el.hasAttribute('href') && isNavLink(el)) { hide(el); continue; }
+              if (el.children.length === 0) {
+                var t = el.textContent.trim();
+                if (t === 'Ad' || t === 'Sponsored') hideAdCell(el);
+                else if (UPSELL.test(t)) hideUpsell(el);
               }
-              hide(box);
-            });
+            }
+            hideBarAround(icons);
           }
-          // Ads: a card with a small "Ad" / "Sponsored" label. Hide the grid cell it lives in,
-          // i.e. the closest ancestor just below the first full-width container.
-          function hideAds() {
-            var labels = Array.prototype.slice.call(document.querySelectorAll('span, div, a')).filter(function (el) {
-              return el.children.length === 0 && /^(Ad|Sponsored)$/.test(el.textContent.trim()) &&
-                     el.getBoundingClientRect().height < 32;
-            });
-            labels.forEach(function (label) {
-              var cell = label, p = label.parentElement;
-              while (p && p !== document.body && p.getBoundingClientRect().width < innerWidth * 0.9) { cell = p; p = p.parentElement; }
-              if (cell !== label && cell.getBoundingClientRect().height > 80) {
-                hide(cell);
-                // Collapse the row/section the ad lived in once nothing visible is left in it,
-                // so it doesn't leave a blank gap behind.
-                var c = cell.parentElement;
-                while (c && c !== document.body) {
-                  var visibleKids = Array.prototype.filter.call(c.children, function (k) {
-                    return getComputedStyle(k).display !== 'none' && k.getBoundingClientRect().height > 0;
-                  });
-                  if (visibleKids.length > 0) break;
-                  hide(c);
-                  c = c.parentElement;
-                }
-              }
-            });
-          }
-          function tidy() { hideBar(); hideAds(); }
-          tidy();
-          if (!window.__omObserver) {
-            window.__omObserver = new MutationObserver(function () {
-              clearTimeout(window.__omTimer);
-              window.__omTimer = setTimeout(tidy, 150);
-            });
-            window.__omObserver.observe(document.documentElement, { childList: true, subtree: true });
-          }
+          window.__omScan = scan;
+          scan(document.body);
+
+          var pending = [];
+          new MutationObserver(function (records) {
+            for (var r = 0; r < records.length; r++) {
+              var added = records[r].addedNodes;
+              for (var n = 0; n < added.length; n++) if (added[n].nodeType === 1) pending.push(added[n]);
+            }
+            if (pending.length && !window.__omTimer) {
+              window.__omTimer = setTimeout(function () {
+                window.__omTimer = 0;
+                var batch = pending; pending = [];
+                for (var i = 0; i < batch.length; i++) if (batch[i].isConnected) scan(batch[i]);
+              }, 100);
+            }
+          }).observe(document.documentElement, { childList: true, subtree: true });
         })();
     """.trimIndent()
 }

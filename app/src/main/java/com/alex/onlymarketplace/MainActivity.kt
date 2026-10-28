@@ -184,6 +184,10 @@ class MainActivity : ComponentActivity() {
             lastBounce = from
             lastBounceAt = now
             note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
+            if (target == Marketplace.HOME) {
+                // Always-on, so a wrongly blocked page is easy to report (it shows the path).
+                Toast.makeText(this@MainActivity, "Blocked: ${Uri.parse(from).path}", Toast.LENGTH_SHORT).show()
+            }
             // Cover the view so the blocked page never flashes; onPageFinished uncovers it.
             view.visibility = View.INVISIBLE
             view.postDelayed({ view.visibility = View.VISIBLE }, 4000) // safety net if the load stalls
@@ -195,7 +199,6 @@ class MainActivity : ComponentActivity() {
             // Belt and braces: form posts and server redirects can skip shouldOverrideUrlLoading.
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri) || Marketplace.loginRedirect(uri) != null) return
-            Marketplace.searchRedirect(uri)?.let { bounce(view, url, it); return }
             if (!Marketplace.isAllowed(uri)) bounce(view, url)
         }
 
@@ -216,7 +219,6 @@ class MainActivity : ComponentActivity() {
                 return true
             }
             Marketplace.loginRedirect(url)?.let { bounce(view, url.toString(), it); return true }
-            Marketplace.searchRedirect(url)?.let { bounce(view, url.toString(), it); return true }
             if (Marketplace.isAllowed(url)) {
                 // Right identity for this page? If it changed, load it ourselves so the new one applies.
                 if (applyUaFor(url)) { view.loadUrl(url.toString()); return true }
@@ -232,7 +234,6 @@ class MainActivity : ComponentActivity() {
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
-            Marketplace.searchRedirect(uri)?.let { bounce(view, url, it); return }
             if (!Marketplace.isAllowed(uri)) bounce(view, url)
         }
 
