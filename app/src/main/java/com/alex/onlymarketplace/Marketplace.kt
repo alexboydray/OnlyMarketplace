@@ -193,10 +193,28 @@ object Marketplace {
               hide(el);
             }
           }
+          // Blunter fallback: whatever is drawn across the very top of the page, climb to its
+          // full-width container and hide it if it has no real words (the Marketplace header
+          // below it says "Marketplace", so that one survives).
+          function hideTopBarByPoint() {
+            if (scrollY > 2) return;
+            var xs = [innerWidth * 0.1, innerWidth * 0.5, innerWidth * 0.9];
+            for (var k = 0; k < xs.length; k++) {
+              var el = document.elementFromPoint(xs[k], 25);
+              while (el && el !== document.body) {
+                var r = el.getBoundingClientRect();
+                if (r.width >= innerWidth * 0.9 && r.height >= 40 && r.height <= 130) {
+                  if (GLYPHS_ONLY.test(el.textContent)) hide(el);
+                  break;
+                }
+                el = el.parentElement;
+              }
+            }
+          }
           function depthOf(el) { var d = 0; while (el && el !== document.body && d < 9) { el = el.parentElement; d++; } return d; }
           function scan(root) {
             if (!root || root.nodeType !== 1) return;
-            if (depthOf(root) <= 5) hideStrip(root);
+            if (depthOf(root) <= 5) { hideStrip(root); hideTopBarByPoint(); }
             var icons = [];
             if (isNavIcon(root)) icons.push(root);
             var all = root.querySelectorAll('a[href], [aria-label], span, div, button, [role=button]');
@@ -214,6 +232,8 @@ object Marketplace {
           }
           window.__omScan = scan;
           scan(document.body);
+          setTimeout(hideTopBarByPoint, 800);
+          setTimeout(hideTopBarByPoint, 2500);
 
           var pending = [];
           new MutationObserver(function (records) {
