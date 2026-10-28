@@ -50,6 +50,39 @@ object Marketplace {
         })()
     """.trimIndent()
 
+    /**
+     * Facebook's login page sometimes arrives hidden and the script meant to reveal it crashes.
+     * Walk up from the first input, report anything hiding it, and force it visible. Login is a
+     * plain form post, so it works without Facebook's script.
+     */
+    val REVEAL_LOGIN_JS = """
+        (function () {
+          var i = document.querySelector('input'); if (!i) return 'no input';
+          var found = [], e = i;
+          while (e && e !== document) {
+            var s = getComputedStyle(e);
+            var bad = (s.visibility !== 'visible' ? 'vis=' + s.visibility : '') +
+                      (s.opacity === '0' ? ' op=0' : '') +
+                      (s.display === 'none' ? ' display=none' : '') +
+                      (s.clipPath !== 'none' ? ' clip' : '') +
+                      (s.transform !== 'none' ? ' tf' : '');
+            if (bad) {
+              found.push(e.tagName + (e.id ? '#' + e.id : '') + '[' + bad.trim() + ']');
+              e.style.setProperty('visibility', 'visible', 'important');
+              e.style.setProperty('opacity', '1', 'important');
+              e.style.setProperty('display', e.tagName === 'INPUT' ? 'inline-block' : 'block', 'important');
+              e.style.setProperty('transform', 'none', 'important');
+              e.style.setProperty('clip-path', 'none', 'important');
+            }
+            e = e.parentElement;
+          }
+          var r = i.getBoundingClientRect();
+          var top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          var cover = (top && top !== i && !i.contains(top) && !top.contains(i)) ? top.tagName + (top.id ? '#' + top.id : '') + '.' + String(top.className).slice(0, 30) : 'none';
+          return 'hidden=[' + found.join(' > ') + '] cover=' + cover;
+        })()
+    """.trimIndent()
+
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
 

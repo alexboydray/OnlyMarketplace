@@ -212,8 +212,14 @@ class MainActivity : ComponentActivity() {
         override fun onPageFinished(view: WebView, url: String) {
             refresh.isRefreshing = false
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
-            if (Uri.parse(url).path.orEmpty().startsWith("/marketplace")) {
+            val onMarketplace = Uri.parse(url).path.orEmpty().startsWith("/marketplace")
+            if (onMarketplace) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
+            } else if (!Marketplace.isLoggedIn()) {
+                // Login/consent pages: make sure the form is actually visible (see REVEAL_LOGIN_JS).
+                val reveal = { view.evaluateJavascript(Marketplace.REVEAL_LOGIN_JS) { note("REVEAL $it") } }
+                reveal()
+                view.postDelayed(reveal, 1500)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
@@ -228,7 +234,7 @@ class MainActivity : ComponentActivity() {
         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
             if (Marketplace.DEBUG_TOASTS && msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR && jsErrorsShown < 3) {
                 jsErrorsShown++
-                note("JS ${msg.message().take(120)}")
+                note("JS ${msg.message().take(90)} @ ${msg.sourceId().substringAfterLast('/').take(40)}:${msg.lineNumber()}")
             }
             return false
         }
