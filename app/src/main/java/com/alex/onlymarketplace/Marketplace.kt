@@ -115,25 +115,39 @@ object Marketplace {
           // Paths that belong to Facebook's main nav, not Marketplace.
           var NAV = /^\/(\?|home\.php|friends|notifications|watch|reel|video|groups|gaming|bookmarks|menu)?(\/|\?|$)/;
           function pathOf(a) { try { var u = new URL(a.getAttribute('href'), location.href); return u.pathname + u.search; } catch (e) { return ''; } }
+          function hide(el) { el.style.setProperty('display', 'none', 'important'); }
           function hideBar() {
-            var links = Array.prototype.slice.call(document.querySelectorAll('a[href]')).filter(function (a) {
-              var p = pathOf(a); return p === '/' || NAV.test(p);
+            // 1. Individual nav links (href-based) and labelled icon buttons.
+            var LABELS = /^(Home|Friends|Messenger|Messages|Video|Reels|Watch|Notifications|Menu)$/;
+            Array.prototype.slice.call(document.querySelectorAll('a[href], [aria-label]')).forEach(function (el) {
+              var p = el.getAttribute('href') ? pathOf(el) : '';
+              var lbl = el.getAttribute('aria-label') || '';
+              if (p === '/' || NAV.test(p) || (LABELS.test(lbl) && el.getBoundingClientRect().width < innerWidth * 0.4)) hide(el);
             });
-            var home = null, notif = null;
-            links.forEach(function (a) {
-              var p = pathOf(a);
-              if (!home && (p === '/' || /^\/(\?|home\.php)/.test(p))) home = a;
-              if (!notif && /^\/notifications/.test(p)) notif = a;
-              a.style.setProperty('display', 'none', 'important');
+            // 2. The bar itself: a full-width strip, 40–130px tall, whose only text is badge
+            //    counts ("15+", "6") and which holds several icon buttons. Marketplace's own
+            //    header has real words in it, so it never matches.
+            Array.prototype.slice.call(document.querySelectorAll('div, nav, header')).forEach(function (el) {
+              var r = el.getBoundingClientRect();
+              if (r.width < innerWidth * 0.9 || r.height < 40 || r.height > 130) return;
+              if (el.innerText.replace(/[\d+\s]/g, '') !== '') return;
+              if (el.querySelectorAll('a, [role=button], [role=link], svg').length < 3) return;
+              // Only the outermost such strip (skip if a parent already qualifies).
+              var pr = el.parentElement ? el.parentElement.getBoundingClientRect() : null;
+              if (pr && pr.height <= 130 && el.parentElement.innerText.replace(/[\d+\s]/g, '') === '' && el.parentElement !== document.body) return;
+              hide(el);
             });
-            // The whole bar is the smallest box holding both Home and Notifications.
-            if (home && notif) {
-              var box = home.parentElement;
-              while (box && box !== document.body && !box.contains(notif)) box = box.parentElement;
-              if (box && box !== document.body && box.getBoundingClientRect().height < 200) {
-                box.style.setProperty('display', 'none', 'important');
+            // 3. Facebook's "Open app" upsell button and the strip it sits in.
+            Array.prototype.slice.call(document.querySelectorAll('a, button, [role=button]')).forEach(function (el) {
+              if (!/^(Open app|Open in app|Use app|Get app)$/i.test(el.innerText.trim())) return;
+              var box = el, p = el.parentElement;
+              while (p && p !== document.body) {
+                var pos = getComputedStyle(p).position;
+                if (pos === 'fixed' || pos === 'sticky') { box = p; break; }
+                p = p.parentElement;
               }
-            }
+              hide(box);
+            });
           }
           // Ads: a card with a small "Ad" / "Sponsored" label. Hide the grid cell it lives in,
           // i.e. the closest ancestor just below the first full-width container.

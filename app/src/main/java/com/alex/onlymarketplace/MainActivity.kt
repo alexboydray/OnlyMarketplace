@@ -152,6 +152,8 @@ class MainActivity : ComponentActivity() {
         }
 
         if (savedInstanceState == null) {
+            webView.visibility = View.INVISIBLE // uncovered in onPageFinished once the bar is hidden
+            webView.postDelayed({ webView.visibility = View.VISIBLE }, 6000)
             webView.loadUrl(Marketplace.HOME)
         } else {
             webView.restoreState(savedInstanceState)
@@ -182,6 +184,9 @@ class MainActivity : ComponentActivity() {
             lastBounce = from
             lastBounceAt = now
             note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
+            // Cover the view so the blocked page never flashes; onPageFinished uncovers it.
+            view.visibility = View.INVISIBLE
+            view.postDelayed({ view.visibility = View.VISIBLE }, 4000) // safety net if the load stalls
             view.post { view.stopLoading(); applyUaFor(Uri.parse(target)); view.loadUrl(target) }
         }
 
@@ -239,6 +244,10 @@ class MainActivity : ComponentActivity() {
 
         override fun onPageFinished(view: WebView, url: String) {
             refresh.isRefreshing = false
+            if (view.visibility != View.VISIBLE) {
+                // Uncover after the hide script has had a moment to run, so the bar never flashes either.
+                view.evaluateJavascript(Marketplace.HIDE_CHROME_JS) { view.postDelayed({ view.visibility = View.VISIBLE }, 120) }
+            }
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
             val uri = Uri.parse(url)
             // Wrong identity for where we ended up (e.g. just logged in, landed on Marketplace
