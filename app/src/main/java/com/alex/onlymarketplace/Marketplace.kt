@@ -28,6 +28,20 @@ object Marketplace {
     }
 
     /**
+     * Searching from the Marketplace home page goes through Facebook's general search URL
+     * (/search/...). Keep it if it's a Marketplace search; otherwise turn it into one.
+     */
+    fun searchRedirect(uri: Uri): String? {
+        if (!uri.path.orEmpty().startsWith("/search")) return null
+        if (uri.toString().contains("marketplace", ignoreCase = true)) return null // already Marketplace
+        val q = uri.getQueryParameter("q") ?: uri.getQueryParameter("query") ?: return HOME
+        return "https://www.facebook.com/marketplace/search/?query=" + Uri.encode(q)
+    }
+
+    fun isMarketplaceSearch(uri: Uri): Boolean =
+        uri.path.orEmpty().startsWith("/search") && uri.toString().contains("marketplace", ignoreCase = true)
+
+    /**
      * Facebook's mobile login page relies on a script that crashes inside a WebView and leaves
      * the page collapsed. The desktop login page is a plain form, so while logged out and off
      * Marketplace we present a desktop browser, then switch back to mobile once signed in.
@@ -83,6 +97,7 @@ object Marketplace {
         val path = uri.path.orEmpty().ifEmpty { "/" }
         // Logged-out facebook.com/ IS the login page, so let it through until there's a session.
         if ((path == "/" || path == "/home.php") && !isLoggedIn()) return true
+        if (isMarketplaceSearch(uri)) return true
         if (ALLOWED_PREFIXES.any { path.startsWith(it) }) return true
         if (ALLOW_MESSAGES && MESSAGE_PREFIXES.any { path.startsWith(it) }) return true
         // Static assets (scripts, images, CDN) have their own hosts and never hit the path rules,

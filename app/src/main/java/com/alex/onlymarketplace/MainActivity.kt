@@ -194,9 +194,9 @@ class MainActivity : ComponentActivity() {
             note("START ${url.take(100)}")
             // Belt and braces: form posts and server redirects can skip shouldOverrideUrlLoading.
             val uri = Uri.parse(url)
-            if (Marketplace.isFacebookHost(uri) && Marketplace.loginRedirect(uri) == null && !Marketplace.isAllowed(uri)) {
-                bounce(view, url)
-            }
+            if (!Marketplace.isFacebookHost(uri) || Marketplace.loginRedirect(uri) != null) return
+            Marketplace.searchRedirect(uri)?.let { bounce(view, url, it); return }
+            if (!Marketplace.isAllowed(uri)) bounce(view, url)
         }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -216,6 +216,7 @@ class MainActivity : ComponentActivity() {
                 return true
             }
             Marketplace.loginRedirect(url)?.let { bounce(view, url.toString(), it); return true }
+            Marketplace.searchRedirect(url)?.let { bounce(view, url.toString(), it); return true }
             if (Marketplace.isAllowed(url)) {
                 // Right identity for this page? If it changed, load it ourselves so the new one applies.
                 if (applyUaFor(url)) { view.loadUrl(url.toString()); return true }
@@ -231,6 +232,7 @@ class MainActivity : ComponentActivity() {
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
+            Marketplace.searchRedirect(uri)?.let { bounce(view, url, it); return }
             if (!Marketplace.isAllowed(uri)) bounce(view, url)
         }
 
