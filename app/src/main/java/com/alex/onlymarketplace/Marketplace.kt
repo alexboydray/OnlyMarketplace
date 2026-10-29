@@ -198,12 +198,21 @@ object Marketplace {
           // Any *visible* run of letters (a title like "Marketplace", a chip like "Inbox") rules
           // the element out; the bar's only letters are hidden labels with no size.
           function hasVisibleWords(el) {
+            var box = el.getBoundingClientRect();
             var leaves = el.querySelectorAll('*');
+            window.__omVis = '';
             for (var i = 0; i < leaves.length && i < 200; i++) {
               var n = leaves[i];
               if (n.children.length !== 0 || !/[A-Za-z]{2,}/.test(n.textContent)) continue;
               var r = n.getBoundingClientRect();
-              if (r.width >= 30 && r.height >= 10) return true;
+              if (r.width < 30 || r.height < 10) continue;
+              // Must actually sit inside the strip's own box (off-screen labels don't).
+              if (r.right <= box.left || r.left >= box.right || r.bottom <= box.top || r.top >= box.bottom) continue;
+              var s = getComputedStyle(n);
+              if (s.visibility !== 'visible' || s.opacity === '0' || s.clip !== 'auto' || s.clipPath !== 'none' ||
+                  parseFloat(s.fontSize) < 8 || s.color === 'rgba(0, 0, 0, 0)') continue;
+              window.__omVis = n.textContent.trim().slice(0, 20) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) + ',' + Math.round(r.left);
+              return true;
             }
             return false;
           }
@@ -232,7 +241,7 @@ object Marketplace {
                 if (k === 0) report.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' t=' + el.textContent.replace(/\s+/g, '').length);
                 if (r.width >= innerWidth * 0.9 && r.height >= 40 && r.height <= 130) {
                   if (isIconBar(el)) { hide(el); if (k === 0) report.push('HID'); }
-                  else if (k === 0) report.push('cells=' + cellCount(el) + ' TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
+                  else if (k === 0) report.push('cells=' + cellCount(el) + ' vis=[' + (window.__omVis || '') + '] TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
                   break;
                 }
                 el = el.parentElement;
