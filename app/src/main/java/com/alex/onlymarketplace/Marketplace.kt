@@ -70,6 +70,27 @@ object Marketplace {
         })()
     """.trimIndent()
 
+    /** Diagnostic: the tab-bar container's subtree, one element per line. */
+    val TREE_DUMP_JS = """
+        (function () {
+          var tl = document.querySelector('[role="tablist"][data-om-done]') || document.querySelector('[role="tablist"]');
+          if (!tl) return '';
+          var out = [];
+          function walk(e, d) {
+            if (d > 7 || out.length > 40) return;
+            var r = e.getBoundingClientRect(), s = getComputedStyle(e);
+            var txt = e.children.length === 0 ? e.textContent.trim().slice(0, 14) : '';
+            out.push(Array(d + 1).join('. ') + e.tagName + (e.getAttribute('role') ? '[' + e.getAttribute('role') + ']' : '') +
+              ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) +
+              ' ' + s.position + (s.display === 'none' ? ' NONE' : '') + (s.overflow !== 'visible' ? ' ov=' + s.overflow : '') +
+              (s.transform !== 'none' ? ' tf' : '') + (e.style.top ? ' top=' + e.style.top : '') + (txt ? ' "' + txt + '"' : ''));
+            for (var i = 0; i < e.children.length; i++) walk(e.children[i], d + 1);
+          }
+          walk(tl, 0);
+          return out.join('\n');
+        })()
+    """.trimIndent()
+
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
 
