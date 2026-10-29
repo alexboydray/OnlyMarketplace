@@ -220,7 +220,17 @@ object Marketplace {
             }
             return false;
           }
-          function isIconBar(el) { return iconsOnly(el) && !hasVisibleWords(el) && cellCount(el) >= 5; }
+          // Icon glyphs are leaf elements whose whole text is one or two non-letter, non-digit
+          // characters. The nav bar has six of them; the Marketplace header has two.
+          function glyphCount(el) {
+            var n = 0, leaves = el.querySelectorAll('*');
+            for (var i = 0; i < leaves.length && i < 200; i++) {
+              var t = leaves[i].children.length === 0 ? leaves[i].textContent.trim() : '';
+              if (t.length >= 1 && t.length <= 2 && !/[A-Za-z0-9+]/.test(t)) n++;
+            }
+            return n;
+          }
+          function isIconBar(el) { return iconsOnly(el) && glyphCount(el) >= 5 && cellCount(el) >= 5; }
           function hideStrip(root) {
             var els = root.querySelectorAll('div, nav, header');
             for (var i = 0; i < els.length; i++) {
@@ -245,7 +255,7 @@ object Marketplace {
                 if (k === 0) report.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' t=' + el.textContent.replace(/\s+/g, '').length);
                 if (r.width >= innerWidth * 0.9 && r.height >= 40 && r.height <= 130) {
                   if (isIconBar(el)) { hide(el); if (k === 0) report.push('HID'); }
-                  else if (k === 0) report.push('cells=' + cellCount(el) + ' vis=[' + (window.__omVis || '') + '] TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
+                  else if (k === 0) report.push('cells=' + cellCount(el) + ' glyphs=' + glyphCount(el) + ' TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
                   break;
                 }
                 el = el.parentElement;
