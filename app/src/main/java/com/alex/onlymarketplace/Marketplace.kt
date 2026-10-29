@@ -187,11 +187,15 @@ object Marketplace {
           // The Marketplace header (back, title, search) is also icons-only once tab words are
           // ignored, but it has 3 cells; the nav bar has 6. Require 5+ cells in the first two levels.
           function cellCount(el) {
-            var n = el.children.length;
-            if (n === 1) n = el.children[0].children.length;
-            return n;
+            // Count distinct columns of icon-sized boxes (40–130px wide), however deeply nested.
+            var cols = {}, all = el.querySelectorAll('*');
+            for (var i = 0; i < all.length && i < 150; i++) {
+              var r = all[i].getBoundingClientRect();
+              if (r.width >= 40 && r.width <= 130 && r.height >= 24) cols[Math.round(r.left / 40)] = 1;
+            }
+            return Object.keys(cols).length;
           }
-          function isIconBar(el) { return cellCount(el) >= 5 && iconsOnly(el); }
+          function isIconBar(el) { return iconsOnly(el) && cellCount(el) >= 5; }
           function hideStrip(root) {
             var els = root.querySelectorAll('div, nav, header');
             for (var i = 0; i < els.length; i++) {
