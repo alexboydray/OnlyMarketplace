@@ -65,7 +65,9 @@ object Marketplace {
             var el = all[i];
             if (SKIP.test(el.tagName)) continue;
             var cs = getComputedStyle(el);
-            if (!/hidden|clip/.test(cs.overflow + cs.overflowY)) continue;
+            // ANY non-visible overflow clips: hidden, clip, scroll and auto alike. (The login
+            // form sits in a 0px-tall overflow:scroll box — see the 0.5.6 diagnostic.)
+            if (cs.overflow === 'visible' && cs.overflowY === 'visible' && cs.overflowX === 'visible') continue;
             if (cs.clip !== 'auto') continue;
             var h = el.getBoundingClientRect().height;
             if (h >= 60) continue;
@@ -76,6 +78,15 @@ object Marketplace {
             el.style.setProperty('min-height', '0', 'important');
             el.style.setProperty('max-height', 'none', 'important');
             opened++;
+            // Zero-height wrappers above it would keep the document 18px tall (no scrolling),
+            // so let them grow with their content too.
+            for (var p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+              if (p.getBoundingClientRect().height < 2) {
+                p.style.setProperty('height', 'auto', 'important');
+                p.style.setProperty('min-height', '0', 'important');
+                p.style.setProperty('overflow', 'visible', 'important');
+              }
+            }
           }
           // The form is laid out fine but painted over: Facebook's full-screen loading overlay
           // stays up when its script crashes. Anchor on the biggest form element (field, captcha
