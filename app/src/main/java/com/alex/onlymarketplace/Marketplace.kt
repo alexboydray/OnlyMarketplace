@@ -9,6 +9,9 @@ import android.webkit.CookieManager
  */
 object Marketplace {
 
+    /** Bump to make the next launch wipe all site data once (fresh browser identity). */
+    const val RESET_GENERATION = 1
+
     const val HOME = "https://m.facebook.com/marketplace/"
     const val LOGIN = "https://www.facebook.com/login/?next=$HOME"
 

@@ -11,6 +11,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.view.Gravity
@@ -157,6 +158,21 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this) {
             if (webView.canGoBack()) webView.goBack() else finish()
+        }
+
+        // One-time clean slate (per RESET_GENERATION): an earlier version wiped only part of
+        // Facebook's cookie jar, which Facebook treats as a tampered device and then refuses to
+        // open a session after login. Clearing everything makes it a brand-new browser.
+        val prefs = getSharedPreferences("om", MODE_PRIVATE)
+        val resetDone = prefs.getInt("reset_generation", 0) >= Marketplace.RESET_GENERATION
+        if (!resetDone) {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            WebStorage.getInstance().deleteAllData()
+            webView.clearCache(true)
+            webView.clearHistory()
+            prefs.edit().putInt("reset_generation", Marketplace.RESET_GENERATION).apply()
+            note("Site data reset (generation ${Marketplace.RESET_GENERATION})")
         }
 
         if (savedInstanceState == null) {
