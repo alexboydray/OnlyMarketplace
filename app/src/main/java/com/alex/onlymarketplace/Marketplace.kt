@@ -70,30 +70,6 @@ object Marketplace {
         })()
     """.trimIndent()
 
-    /** Diagnostic: the tab-bar container's subtree, one element per line. */
-    val TREE_DUMP_JS = """
-        (function () {
-          var tl = document.querySelector('[role="tablist"][data-om-done]') || document.querySelector('[role="tablist"]');
-          if (!tl) return '';
-          var out = [];
-          function walk(e, d) {
-            if (d > 8 || out.length > 60) return;
-            var r = e.getBoundingClientRect(), s = getComputedStyle(e);
-            var txt = e.children.length === 0 ? e.textContent.trim().slice(0, 14) : '';
-            var isTab = e.getAttribute('role') === 'tab';
-            out.push(Array(d + 1).join('. ') + e.tagName + (e.getAttribute('role') ? '[' + e.getAttribute('role') + ']' : '') +
-              ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) +
-              ' ' + s.position + (s.display === 'none' ? ' NONE' : '') + (s.overflow !== 'visible' ? ' ov=' + s.overflow : '') +
-              (s.transform !== 'none' ? ' tf' : '') + (parseFloat(s.marginTop) ? ' mt=' + s.marginTop : '') + (parseFloat(s.paddingTop) ? ' pt=' + s.paddingTop : '') +
-              (e.style.top ? ' top=' + e.style.top : '') + (isTab ? ' lbl=' + (e.getAttribute('aria-label') || '').slice(0, 10) : '') + (txt ? ' "' + txt + '"' : ''));
-            if (isTab) return; // icon tabs: one line each
-            for (var i = 0; i < e.children.length; i++) walk(e.children[i], d + 1);
-          }
-          walk(tl, 0);
-          return out.join('\n');
-        })()
-    """.trimIndent()
-
     /** Set false to also block chatting with buyers/sellers via Messenger. */
     private const val ALLOW_MESSAGES = true
 
@@ -162,10 +138,15 @@ object Marketplace {
               var labels = Array.prototype.map.call(tabs, function (t) { return (t.getAttribute('aria-label') || '').toLowerCase(); }).join('|');
               if (!/\b(feed|friends|notifications|video|watch|reels|menu)\b/.test(labels)) continue;
               var tl = lists[i];
-              if (tl.getAttribute('data-om-done')) continue;
+              // Facebook re-renders individual tabs (badge updates), so hiding must re-apply
+              // every time; the container resize happens once.
+              if (tl.getAttribute('data-om-done')) {
+                for (var t0 = 0; t0 < tabs.length; t0++) hide(tabs[t0]);
+                continue;
+              }
               // The container holds two rows: the icon tabs on top and the page header
-              // ("< Marketplace", search) below. Measure the icon row, hide the tabs, shrink the
-              // container by that much and slide the remaining children up into the gap.
+              // ("< Marketplace", search) below. Measure the icon row, hide the tabs, and take
+              // the icon row's height off the container; the header then flows to the top.
               var tr = tl.getBoundingClientRect(), rowBottom = tr.top;
               for (var t = 0; t < tabs.length; t++) {
                 var b = tabs[t].getBoundingClientRect().bottom;
@@ -212,6 +193,9 @@ object Marketplace {
           function scan(root) {
             if (!root || root.nodeType !== 1) return;
             hideTabBar(root);
+            // A single re-rendered tab arrives on its own; re-check the bar it belongs to.
+            var bar = root.closest ? root.closest('[role="tablist"]') : null;
+            if (bar && bar !== root) hideTabBar(bar);
             var all = root.querySelectorAll('a[href], span, div, button, [role=button]');
             for (var i = 0; i < all.length; i++) {
               var el = all[i];

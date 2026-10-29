@@ -38,7 +38,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var debugLog: TextView
     private val logLines = ArrayDeque<String>()
     private var mobileUa = ""
-    private var titleReported = false
 
     /**
      * Pick the browser identity for a URL: desktop for login/checkpoint pages while logged out,
@@ -294,16 +293,6 @@ class MainActivity : ComponentActivity() {
             }
             if (uri.path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
-                // Temporary: dump the tab-bar container's subtree into the strip (tap to dismiss).
-                for (delay in listOf(3000L, 7000L, 12000L)) view.postDelayed({
-                    if (titleReported) return@postDelayed
-                    view.evaluateJavascript(Marketplace.TREE_DUMP_JS) { r ->
-                        if (r.length < 20 || titleReported) return@evaluateJavascript
-                        titleReported = true
-                        debugLog.text = r.trim('"').replace("\\n", "\n").replace("\\u003C", "<")
-                        debugLog.visibility = View.VISIBLE
-                    }
-                }, delay)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
