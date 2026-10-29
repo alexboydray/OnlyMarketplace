@@ -211,6 +211,10 @@ object Marketplace {
               var s = getComputedStyle(n);
               if (s.visibility !== 'visible' || s.opacity === '0' || s.clip !== 'auto' || s.clipPath !== 'none' ||
                   parseFloat(s.fontSize) < 8 || s.color === 'rgba(0, 0, 0, 0)') continue;
+              // The decisive test: is this text what's actually painted at its own centre?
+              // Labels clipped by a zero-size parent measure fine but something else is on top.
+              var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!hit || (hit !== n && !n.contains(hit))) continue;
               window.__omVis = n.textContent.trim().slice(0, 20) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) + ',' + Math.round(r.left);
               return true;
             }
