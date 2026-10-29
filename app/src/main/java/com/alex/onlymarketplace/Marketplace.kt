@@ -66,7 +66,7 @@ object Marketplace {
           return document.title.slice(0, 24) + ' | op=' + cs.opacity + ' vis=' + cs.visibility +
             ' w=' + innerWidth + ' h=' + document.documentElement.scrollHeight + ' sy=' + scrollY +
             ' input@' + (r ? Math.round(r.top) + ',' + Math.round(r.left) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) : 'none') +
-            ' | hid=[' + ((window.__omHid || []).join(' ; ')) + '] top=' + (window.__omTop || '-');
+            ' | hid=[' + ((window.__omHid || []).join(' ; ')) + '] DUMP: ' + (window.__omDump || '-');
         })()
     """.trimIndent()
 
@@ -279,10 +279,26 @@ object Marketplace {
             }
             window.__omTop = report.join(' < ');
           }
+          // Diagnostic: raw markup of the first two full-width strips at the top of the page,
+          // captured before anything is hidden.
+          function dumpTop() {
+            if (window.__omDump || scrollY > 2) return;
+            var dumps = [], y = 25, seen = [];
+            for (var pass = 0; pass < 2; pass++) {
+              var e = document.elementFromPoint(innerWidth * 0.5, y);
+              while (e && e !== document.body && e.getBoundingClientRect().width < innerWidth * 0.9) e = e.parentElement;
+              if (!e || e === document.body || seen.indexOf(e) >= 0) break;
+              seen.push(e);
+              var rr = e.getBoundingClientRect();
+              dumps.push(Math.round(rr.height) + 'px: ' + e.outerHTML.replace(/\s+/g, ' ').slice(0, 260));
+              y = rr.bottom + 20;
+            }
+            if (dumps.length) window.__omDump = dumps.join(' ||| ');
+          }
           function depthOf(el) { var d = 0; while (el && el !== document.body && d < 9) { el = el.parentElement; d++; } return d; }
           function scan(root) {
             if (!root || root.nodeType !== 1) return;
-            if (depthOf(root) <= 5) { hideStrip(root); hideTopBarByPoint(); }
+            if (depthOf(root) <= 5) { dumpTop(); hideStrip(root); hideTopBarByPoint(); }
             var icons = [];
             if (isNavIcon(root)) icons.push(root);
             var all = root.querySelectorAll('a[href], [aria-label], span, div, button, [role=button]');
