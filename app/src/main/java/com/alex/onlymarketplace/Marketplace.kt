@@ -159,6 +159,16 @@ object Marketplace {
                 // With the tabs gone the header row flows to the top on its own; just take the
                 // icon row's height off the container so nothing below is pushed down.
                 tl.style.setProperty('height', Math.round(tr.height - rowH) + 'px', 'important');
+                // The header's back arrow (first button in the row) leads out of Marketplace.
+                // Blank it but keep its space: the title overlaps the row with a negative margin.
+                Array.prototype.forEach.call(tl.children, function (row) {
+                  if (row.getAttribute('role') === 'tab') return;
+                  var back = row.querySelector('[role="button"]');
+                  if (back && back.getBoundingClientRect().left < 60) {
+                    back.style.setProperty('visibility', 'hidden', 'important');
+                    back.style.setProperty('pointer-events', 'none', 'important');
+                  }
+                });
               } else {
                 hide(tl); // nothing but tabs in it
               }
