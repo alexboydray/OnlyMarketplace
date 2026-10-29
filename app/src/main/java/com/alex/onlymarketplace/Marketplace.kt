@@ -77,13 +77,16 @@ object Marketplace {
           if (!tl) return '';
           var out = [];
           function walk(e, d) {
-            if (d > 7 || out.length > 40) return;
+            if (d > 8 || out.length > 60) return;
             var r = e.getBoundingClientRect(), s = getComputedStyle(e);
             var txt = e.children.length === 0 ? e.textContent.trim().slice(0, 14) : '';
+            var isTab = e.getAttribute('role') === 'tab';
             out.push(Array(d + 1).join('. ') + e.tagName + (e.getAttribute('role') ? '[' + e.getAttribute('role') + ']' : '') +
               ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) +
               ' ' + s.position + (s.display === 'none' ? ' NONE' : '') + (s.overflow !== 'visible' ? ' ov=' + s.overflow : '') +
-              (s.transform !== 'none' ? ' tf' : '') + (e.style.top ? ' top=' + e.style.top : '') + (txt ? ' "' + txt + '"' : ''));
+              (s.transform !== 'none' ? ' tf' : '') + (parseFloat(s.marginTop) ? ' mt=' + s.marginTop : '') + (parseFloat(s.paddingTop) ? ' pt=' + s.paddingTop : '') +
+              (e.style.top ? ' top=' + e.style.top : '') + (isTab ? ' lbl=' + (e.getAttribute('aria-label') || '').slice(0, 10) : '') + (txt ? ' "' + txt + '"' : ''));
+            if (isTab) return; // icon tabs: one line each
             for (var i = 0; i < e.children.length; i++) walk(e.children[i], d + 1);
           }
           walk(tl, 0);
