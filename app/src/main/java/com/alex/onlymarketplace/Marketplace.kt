@@ -54,7 +54,7 @@ object Marketplace {
         !isLoggedIn() && isFacebookHost(uri) && !uri.path.orEmpty().startsWith("/marketplace")
 
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
-    const val DEBUG_TOASTS = false
+    const val DEBUG_TOASTS = true
 
     /** One-line page report for the debug strip: is the content there, visible, and on screen? */
     val DIAG_JS = """

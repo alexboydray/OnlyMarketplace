@@ -47,15 +47,37 @@ class MainActivity : ComponentActivity() {
         val want = if (Marketplace.wantsDesktop(uri)) Marketplace.DESKTOP_UA else mobileUa
         if (webView.settings.userAgentString == want) return false
         webView.settings.userAgentString = want
+        setClientHints(mobile = want == mobileUa) // keep Sec-CH-UA consistent with the UA string
         note(if (want == mobileUa) "UA → mobile" else "UA → desktop")
         return true
+    }
+
+    /**
+     * Client hints (Sec-CH-UA) announce "Android WebView" regardless of the UA string, and
+     * must agree with whichever identity the UA string claims, or Facebook's security checks
+     * see a browser that contradicts itself.
+     */
+    private fun setClientHints(mobile: Boolean) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return
+        val major = Regex("""Chrome/(\d+)""").find(webView.settings.userAgentString)?.groupValues?.get(1) ?: "131"
+        val brands = listOf("Chromium", "Google Chrome", "Not_A Brand").map { b ->
+            val v = if (b == "Not_A Brand") "24" else major
+            UserAgentMetadata.BrandVersion.Builder().setBrand(b).setMajorVersion(v).setFullVersion("$v.0.0.0").build()
+        }
+        val meta = UserAgentMetadata.Builder()
+            .setBrandVersionList(brands)
+            .setPlatform(if (mobile) "Android" else "Windows")
+            .setPlatformVersion(if (mobile) "15.0.0" else "10.0.0")
+            .setMobile(mobile)
+            .build()
+        WebSettingsCompat.setUserAgentMetadata(webView.settings, meta)
     }
 
     /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
     private fun note(msg: String) {
         if (!Marketplace.DEBUG_TOASTS) return
         logLines.addLast(msg.take(1200))
-        while (logLines.size > 8) logLines.removeFirst()
+        while (logLines.size > 14) logLines.removeFirst()
         debugLog.text = logLines.joinToString("\n")
     }
 
@@ -123,21 +145,7 @@ class MainActivity : ComponentActivity() {
             WebSettingsCompat.setRequestedWithHeaderOriginAllowList(webView.settings, emptySet())
         }
 
-        // Client hints (Sec-CH-UA) also announce "Android WebView" regardless of the UA string.
-        // Present the same brands Chrome does.
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
-            val major = Regex("""Chrome/(\d+)""").find(webView.settings.userAgentString)?.groupValues?.get(1) ?: "131"
-            val brands = listOf("Chromium", "Google Chrome", "Not_A Brand").map { b ->
-                val v = if (b == "Not_A Brand") "24" else major
-                UserAgentMetadata.BrandVersion.Builder().setBrand(b).setMajorVersion(v).setFullVersion("$v.0.0.0").build()
-            }
-            val meta = UserAgentMetadata.Builder()
-                .setBrandVersionList(brands)
-                .setPlatform("Android")
-                .setMobile(true)
-                .build()
-            WebSettingsCompat.setUserAgentMetadata(webView.settings, meta)
-        }
+        setClientHints(mobile = true)
 
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
