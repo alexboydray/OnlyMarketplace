@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var debugLog: TextView
+    private lateinit var authStrip: TextView
     private val logLines = ArrayDeque<String>()
     private var mobileUa = ""
 
@@ -98,9 +99,20 @@ class MainActivity : ComponentActivity() {
             visibility = if (Marketplace.DEBUG_TOASTS) View.VISIBLE else View.GONE
             setOnClickListener { logLines.clear(); text = "" }
         }
+        // Compact readout for login/checkpoint pages only: three lines at the top, tap to dismiss.
+        authStrip = TextView(this).apply {
+            setBackgroundColor(0xCC000000.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 11f
+            maxLines = 3
+            setPadding(24, 8, 24, 8)
+            visibility = View.GONE
+            setOnClickListener { visibility = View.GONE }
+        }
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(debugLog, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
+            addView(authStrip, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
         }
         setContentView(root)
 
@@ -306,6 +318,14 @@ class MainActivity : ComponentActivity() {
                 unclip()
                 view.postDelayed(unclip, 800)
                 view.postDelayed(unclip, 2500)
+                if (Marketplace.AUTH_DIAG) view.postDelayed({
+                    view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
+                        authStrip.text = r.trim('"')
+                        authStrip.visibility = View.VISIBLE
+                    }
+                }, 3000)
+            } else {
+                authStrip.visibility = View.GONE
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }

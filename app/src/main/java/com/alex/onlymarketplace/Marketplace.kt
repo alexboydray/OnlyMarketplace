@@ -39,26 +39,48 @@ object Marketplace {
      */
     val UNCLIP_JS = """
         (function () {
-          var id = 'om-unclip';
-          if (!document.getElementById(id)) {
+          if (!document.getElementById('om-unclip')) {
             var s = document.createElement('style');
-            s.id = id;
-            s.textContent = [
-              'html, body, #viewport, #root, #screen-root { height: auto !important; min-height: 100vh !important; overflow: visible !important; }',
-              '[data-type="container"], [data-mcomponent="MContainer"], .m.vertically-snappable, #viewport > div { height: auto !important; min-height: 0 !important; overflow: visible !important; }',
-              'body { position: static !important; }'
-            ].join('\n');
+            s.id = 'om-unclip';
+            s.textContent = 'html, #viewport, #root, #screen-root { height: auto !important; min-height: 100vh !important; overflow: visible !important; }' +
+                            'body { height: auto !important; min-height: 100vh !important; overflow: visible !important; position: static !important; }';
             (document.head || document.documentElement).appendChild(s);
           }
-          // Inline heights beat a stylesheet only if !important isn't used; it is, but also
-          // clear them directly so measurements elsewhere are sane.
-          var all = document.querySelectorAll('[style*="height"]');
-          for (var i = 0; i < all.length; i++) {
+          // Measure, don't guess: any clipping box under 60px tall that holds more than it
+          // shows gets opened. Deepest first, so once a child is opened its parent measures
+          // taller and opens too. Skips screen-reader-only boxes (clip: rect(...)).
+          var SKIP = /^(IMG|SVG|CANVAS|IFRAME|INPUT|TEXTAREA|SELECT|BUTTON|VIDEO|PATH|USE|G)$/;
+          var all = document.querySelectorAll('body *'), opened = 0;
+          for (var i = all.length - 1; i >= 0; i--) {
             var el = all[i];
-            if (el.tagName === 'IMG' || el.tagName === 'SVG' || el.tagName === 'CANVAS' || el.tagName === 'IFRAME') continue;
-            if (/^\d+px$/.test(el.style.height) && parseInt(el.style.height, 10) < 60 && el.children.length > 0) el.style.height = 'auto';
+            if (SKIP.test(el.tagName)) continue;
+            var cs = getComputedStyle(el);
+            if (!/hidden|clip/.test(cs.overflow + cs.overflowY)) continue;
+            if (cs.clip !== 'auto') continue;
+            var h = el.getBoundingClientRect().height;
+            if (h >= 60) continue;
+            var holdsMore = el.scrollHeight > h + 8 || (h < 2 && (el.children.length > 0 || el.textContent.trim().length > 0));
+            if (!holdsMore) continue;
+            el.style.setProperty('overflow', 'visible', 'important');
+            el.style.setProperty('height', 'auto', 'important');
+            el.style.setProperty('min-height', '0', 'important');
+            el.style.setProperty('max-height', 'none', 'important');
+            opened++;
           }
-          return all.length;
+          return opened;
+        })()
+    """.trimIndent()
+
+    /** Compact readout for login/checkpoint pages: is there a form, and is it on screen? */
+    const val AUTH_DIAG = true
+    val AUTH_DIAG_JS = """
+        (function () {
+          var i = document.querySelector('input:not([type=hidden])');
+          var r = i ? i.getBoundingClientRect() : null;
+          var t = ((document.body && document.body.innerText) || '').replace(/\s+/g, ' ').trim();
+          return document.title.slice(0, 22) + ' | page h=' + document.documentElement.scrollHeight + ' text=' + t.length +
+            ' input=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) : 'none') +
+            ' | ' + t.slice(0, 70);
         })()
     """.trimIndent()
 
