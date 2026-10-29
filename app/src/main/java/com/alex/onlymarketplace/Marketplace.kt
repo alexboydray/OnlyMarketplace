@@ -175,19 +175,9 @@ object Marketplace {
               tl.setAttribute('data-om-done', '1');
               for (var t2 = 0; t2 < tabs.length; t2++) hide(tabs[t2]);
               if (rowH > 0 && rowH < tr.height - 10) {
+                // With the tabs gone the header row flows to the top on its own; just take the
+                // icon row's height off the container so nothing below is pushed down.
                 tl.style.setProperty('height', Math.round(tr.height - rowH) + 'px', 'important');
-                // Walk up from the tabs to the container; at every level, slide up each sibling
-                // that doesn't itself contain a tab (the header, wherever it is nested).
-                var level = tabs[0].parentElement;
-                while (level && level !== tl.parentElement) {
-                  Array.prototype.forEach.call(level.children, function (k) {
-                    if (k.getAttribute('role') === 'tab' || k.querySelector('[role="tab"]')) return;
-                    k.style.setProperty('transform', 'translateY(-' + rowH + 'px)', 'important');
-                  });
-                  level.style.setProperty('overflow', 'visible', 'important');
-                  if (level === tl) break;
-                  level = level.parentElement;
-                }
               } else {
                 hide(tl); // nothing but tabs in it
               }
