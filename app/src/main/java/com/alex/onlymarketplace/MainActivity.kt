@@ -191,12 +191,13 @@ class MainActivity : ComponentActivity() {
             // Facebook's side but the cookie is still here. Forget it and go to the login form.
             recentBounces.addLast(now)
             while (recentBounces.size > 0 && now - recentBounces.first() > 15000) recentBounces.removeFirst()
+            // Loop guard (non-destructive): if Marketplace keeps redirecting to "/", stop
+            // bouncing and show whatever Facebook wants to show. Cookies are never touched;
+            // if the session really is gone Facebook shows its login form there.
             val justAuthenticated = now - lastAuthPageAt < 90_000
             if (!justAuthenticated && target == Marketplace.HOME && recentBounces.size >= 6 && Uri.parse(from).path.orEmpty().trimEnd('/').isEmpty()) {
                 recentBounces.clear()
-                Marketplace.forgetSession()
-                Toast.makeText(this@MainActivity, "Facebook session expired — please log in again", Toast.LENGTH_LONG).show()
-                note("LOOP → forgetting session, going to login")
+                note("LOOP → letting Facebook's page show")
                 view.visibility = View.VISIBLE
                 applyUaFor(Uri.parse(Marketplace.LOGIN))
                 view.loadUrl(Marketplace.LOGIN)
