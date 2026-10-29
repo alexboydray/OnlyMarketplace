@@ -24,8 +24,15 @@ object Marketplace {
      * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
      * hand off to the native app. Skip it and go straight to the web login form instead.
      */
+    private var lastLoginRedirectAt = 0L
+
     fun loginRedirect(uri: Uri): String? {
         if (!uri.path.orEmpty().startsWith("/unified/login_via")) return null
+        // If Facebook sends us straight back here, don't ping-pong: let the interstitial load
+        // (it offers "log in in browser" itself).
+        val now = System.currentTimeMillis()
+        if (now - lastLoginRedirectAt < 10_000) return null
+        lastLoginRedirectAt = now
         val next = uri.getQueryParameter("next") ?: HOME
         return "https://m.facebook.com/login/?next=" + Uri.encode(next)
     }
@@ -241,10 +248,19 @@ object Marketplace {
         return FACEBOOK_HOSTS.any { host == it || host.endsWith(".$it") }
     }
 
+    /** Set by the loop guard: while now < this, the root path is allowed regardless of state. */
+    @Volatile var allowRootUntil = 0L
+
     fun isAllowed(uri: Uri): Boolean {
         val path = uri.path.orEmpty().ifEmpty { "/" }
-        // Logged-out facebook.com/ IS the login page, so let it through until there's a session.
-        if ((path == "/" || path == "/home.php") && !isLoggedIn()) return true
+        if (path == "/" || path == "/home.php") {
+            // Logged-out facebook.com/ IS the login page. "/?next=..." is Facebook's login
+            // handoff (never the feed). And a half-logged-in session (checkpoint pending) has
+            // the login cookie but still gets sent here, so the loop guard can force-allow it.
+            if (!isLoggedIn()) return true
+            if (uri.getQueryParameter("next") != null) return true
+            if (System.currentTimeMillis() < allowRootUntil) return true
+        }
         if (ALLOWED_PREFIXES.any { path.startsWith(it) }) return true
         if (ALLOW_MESSAGES && MESSAGE_PREFIXES.any { path.startsWith(it) }) return true
         // Static assets (scripts, images, CDN) have their own hosts and never hit the path rules,

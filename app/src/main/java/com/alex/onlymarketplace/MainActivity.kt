@@ -215,27 +215,28 @@ class MainActivity : ComponentActivity() {
         private var lastAuthPageAt = 0L // last time a login / checkpoint / captcha page was seen
         private val AUTH_PATHS = listOf("/login", "/checkpoint", "/two_step_verification", "/recover", "/auth", "/x/", "/unified", "/privacy")
 
-        /** Send the view back to Marketplace. Posted so it never collides with the navigation that triggered it. */
-        private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
+        /**
+         * Send the view back to Marketplace (or to [target]). Returns true if it did; false if
+         * the loop guard suppressed it, in which case the caller must let the navigation proceed.
+         */
+        private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME): Boolean {
             val now = System.currentTimeMillis()
-            if (from == lastBounce && now - lastBounceAt < 1000) return // same navigation firing twice
+            if (from == lastBounce && now - lastBounceAt < 1000) return true // same navigation firing twice; first one is handling it
             lastBounce = from
             lastBounceAt = now
 
-            // Loop guard: Marketplace itself keeps redirecting to "/" → the session is dead on
-            // Facebook's side but the cookie is still here. Forget it and go to the login form.
+            // Hard stop: the same page bounced 3 times in 10 seconds means we're in a redirect
+            // loop with Facebook (e.g. a half-logged-in session being sent to "/"). Stop
+            // bouncing, allow the root path for a minute, and let the page show.
             recentBounces.addLast(now)
-            while (recentBounces.size > 0 && now - recentBounces.first() > 15000) recentBounces.removeFirst()
-            // Loop guard (non-destructive): if Marketplace keeps redirecting to "/", stop
-            // bouncing and show whatever Facebook wants to show. Cookies are never touched;
-            // if the session really is gone Facebook shows its login form there.
-            val justAuthenticated = now - lastAuthPageAt < 90_000
-            if (!justAuthenticated && target == Marketplace.HOME && recentBounces.size >= 6 && Uri.parse(from).path.orEmpty().trimEnd('/').isEmpty()) {
+            while (recentBounces.size > 0 && now - recentBounces.first() > 10_000) recentBounces.removeFirst()
+            if (target == Marketplace.HOME && recentBounces.size >= 3) {
                 recentBounces.clear()
-                note("LOOP → letting Facebook's page show")
+                Marketplace.allowRootUntil = now + 60_000
+                note("LOOP → stop bouncing, letting Facebook's page show")
+                Toast.makeText(this@MainActivity, "Redirect loop — showing Facebook's page", Toast.LENGTH_SHORT).show()
                 view.visibility = View.VISIBLE
-                view.loadUrl(Marketplace.LOGIN)
-                return
+                return false
             }
             note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
             if (target == Marketplace.HOME) {
@@ -247,6 +248,7 @@ class MainActivity : ComponentActivity() {
             view.visibility = View.INVISIBLE
             view.postDelayed({ view.visibility = View.VISIBLE }, 4000) // safety net if the load stalls
             view.post { view.stopLoading(); view.loadUrl(target) }
+            return true
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
@@ -275,10 +277,9 @@ class MainActivity : ComponentActivity() {
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
                 return true
             }
-            Marketplace.loginRedirect(url)?.let { bounce(view, url.toString(), it); return true }
+            Marketplace.loginRedirect(url)?.let { return bounce(view, url.toString(), it) }
             if (Marketplace.isAllowed(url)) return false // let the WebView load it
-            bounce(view, url.toString()) // anything else bounces back to Marketplace
-            return true
+            return bounce(view, url.toString()) // anything else bounces back to Marketplace (unless the loop guard says let it through)
         }
 
         // Facebook is a single-page app: most clicks change the URL with pushState, which never
