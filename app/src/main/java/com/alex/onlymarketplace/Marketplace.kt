@@ -136,8 +136,37 @@ object Marketplace {
               var tabs = lists[i].querySelectorAll('[role="tab"]');
               if (tabs.length < 4) continue;
               var labels = Array.prototype.map.call(tabs, function (t) { return (t.getAttribute('aria-label') || '').toLowerCase(); }).join('|');
-              if (/\b(feed|friends|notifications|video|watch|reels|menu)\b/.test(labels)) hide(lists[i]);
+              if (!/\b(feed|friends|notifications|video|watch|reels|menu)\b/.test(labels)) continue;
+              // The Marketplace header lives inside this same container, so hide only the tabs
+              // and let the container shrink around whatever is left.
+              var tl = lists[i];
+              for (var t = 0; t < tabs.length; t++) hide(tabs[t]);
+              tl.style.setProperty('height', 'auto', 'important');
+              tl.style.setProperty('min-height', '0', 'important');
+              // Nothing left but the tabs? Then collapse the container entirely.
+              var left = Array.prototype.filter.call(tl.children, function (k) { return k.style.display !== 'none' && k.getBoundingClientRect().height > 0; });
+              if (left.length === 0) hide(tl);
+              window.__omBar = tl;
             }
+          }
+          // One-time report of where the page title sits relative to the tab bar.
+          function reportTitle() {
+            if (window.__omReported) return;
+            var leaves = document.querySelectorAll('div, span, h1, h2'), out = [];
+            for (var i = 0; i < leaves.length && out.length < 2; i++) {
+              var n = leaves[i];
+              if (n.children.length !== 0 || n.textContent.trim() !== 'Marketplace') continue;
+              var r = n.getBoundingClientRect();
+              var chain = [], e = n;
+              while (e && e !== document.body && chain.length < 6) {
+                var rr = e.getBoundingClientRect(), d = getComputedStyle(e).display;
+                chain.push(e.tagName + (e.getAttribute('role') ? '[' + e.getAttribute('role') + ']' : '') + ' ' + Math.round(rr.height) + 'h@' + Math.round(rr.top) + (d === 'none' ? ' NONE' : ''));
+                e = e.parentElement;
+              }
+              out.push(Math.round(r.width) + 'x' + Math.round(r.height) + ' inBar=' + !!(window.__omBar && window.__omBar.contains(n)) + ' :: ' + chain.join(' < '));
+            }
+            window.__omReported = true;
+            window.__omTitle = out.join('  ////  ');
           }
           // Ad card: climb to the grid cell (last ancestor narrower than the page), hide it,
           // then collapse any wrapper left with nothing visible so there is no gap.
@@ -181,6 +210,7 @@ object Marketplace {
           }
           window.__omScan = scan;
           scan(document.body);
+          setTimeout(reportTitle, 1500);
 
           var pending = [];
           new MutationObserver(function (records) {

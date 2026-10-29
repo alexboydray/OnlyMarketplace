@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var debugLog: TextView
     private val logLines = ArrayDeque<String>()
     private var mobileUa = ""
+    private var titleReported = false
 
     /**
      * Pick the browser identity for a URL: desktop for login/checkpoint pages while logged out,
@@ -293,6 +294,16 @@ class MainActivity : ComponentActivity() {
             }
             if (uri.path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
+                // Temporary: one toast showing where the page title sits relative to the tab bar.
+                view.postDelayed({
+                    view.evaluateJavascript("window.__omTitle || ''") { r ->
+                        if (r.length > 4 && !titleReported) {
+                            titleReported = true
+                            Toast.makeText(this@MainActivity, r.trim('"'), Toast.LENGTH_LONG).show()
+                            view.postDelayed({ Toast.makeText(this@MainActivity, r.trim('"'), Toast.LENGTH_LONG).show() }, 3600)
+                        }
+                    }
+                }, 2200)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
