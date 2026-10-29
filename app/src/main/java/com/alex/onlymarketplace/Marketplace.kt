@@ -195,7 +195,19 @@ object Marketplace {
             }
             return Object.keys(cols).length;
           }
-          function isIconBar(el) { return iconsOnly(el) && cellCount(el) >= 5; }
+          // Any *visible* run of letters (a title like "Marketplace", a chip like "Inbox") rules
+          // the element out; the bar's only letters are hidden labels with no size.
+          function hasVisibleWords(el) {
+            var leaves = el.querySelectorAll('*');
+            for (var i = 0; i < leaves.length && i < 200; i++) {
+              var n = leaves[i];
+              if (n.children.length !== 0 || !/[A-Za-z]{2,}/.test(n.textContent)) continue;
+              var r = n.getBoundingClientRect();
+              if (r.width >= 30 && r.height >= 10) return true;
+            }
+            return false;
+          }
+          function isIconBar(el) { return iconsOnly(el) && !hasVisibleWords(el) && cellCount(el) >= 5; }
           function hideStrip(root) {
             var els = root.querySelectorAll('div, nav, header');
             for (var i = 0; i < els.length; i++) {
