@@ -116,6 +116,87 @@ object Marketplace {
         })()
     """.trimIndent()
 
+    /**
+     * Full page report for a login/checkpoint page that renders blank. Everything that could
+     * explain "laid out but not painted": structure, the form field's ancestor chain with full
+     * styles, positioned and large white boxes, the paint stack at several points, pseudo
+     * elements, and a slice of raw HTML. Copied to the clipboard to paste into chat.
+     */
+    val DIAG_FULL_JS = """
+        (function () {
+          try {
+            function R(el) { var r = el.getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); }
+            function tag(el) {
+              var c = (el.className && typeof el.className === 'string') ? el.className.trim().split(/\s+/).slice(0, 3).join('.') : '';
+              return el.tagName + (el.id ? '#' + el.id : '') + (c ? '.' + c : '') + (el.getAttribute && el.getAttribute('role') ? '[role=' + el.getAttribute('role') + ']' : '');
+            }
+            function sty(el) {
+              var s = getComputedStyle(el);
+              return 'd=' + s.display + ' pos=' + s.position + ' ov=' + s.overflow + ' h=' + s.height + ' w=' + s.width + ' op=' + s.opacity + ' vis=' + s.visibility +
+                ' tf=' + s.transform + ' clip=' + s.clip + ' cp=' + s.clipPath + ' filt=' + s.filter + ' bg=' + s.backgroundColor + ' z=' + s.zIndex +
+                ' top=' + s.top + ' left=' + s.left + ' pe=' + s.pointerEvents + ' cv=' + s.contentVisibility + ' ct=' + s.contain + ' col=' + s.color;
+            }
+            var out = [], i, n, el, s, r;
+            out.push('URL ' + location.href);
+            out.push('TITLE ' + document.title + ' | readyState=' + document.readyState);
+            out.push('VIEWPORT ' + innerWidth + 'x' + innerHeight + ' dpr=' + devicePixelRatio + ' scroll=' + scrollX + ',' + scrollY + ' docH=' + document.documentElement.scrollHeight + ' bodyH=' + document.body.scrollHeight);
+            var vm = document.querySelector('meta[name=viewport]'); out.push('META viewport=' + (vm ? vm.content : 'none'));
+            out.push('HTML ' + sty(document.documentElement));
+            out.push('BODY ' + R(document.body) + ' ' + sty(document.body) + ' children=' + document.body.children.length + ' all=' + document.querySelectorAll('*').length);
+            var tops = [document.documentElement, document.body].concat(Array.prototype.slice.call(document.body.children, 0, 12));
+            ['::before', '::after'].forEach(function (p) {
+              tops.forEach(function (t) {
+                var ps = getComputedStyle(t, p);
+                if (ps.content && ps.content !== 'none' && ps.content !== 'normal') out.push('PSEUDO ' + tag(t) + p + ' content=' + ps.content + ' pos=' + ps.position + ' bg=' + ps.backgroundColor + ' w=' + ps.width + ' h=' + ps.height + ' z=' + ps.zIndex);
+              });
+            });
+            out.push('--- BODY CHILDREN (2 levels)');
+            Array.prototype.forEach.call(document.body.children, function (k) {
+              out.push(' ' + tag(k) + ' ' + R(k) + ' ' + sty(k));
+              Array.prototype.slice.call(k.children, 0, 10).forEach(function (g) {
+                var gs = getComputedStyle(g);
+                out.push('    ' + tag(g) + ' ' + R(g) + ' d=' + gs.display + ' pos=' + gs.position + ' ov=' + gs.overflow + ' bg=' + gs.backgroundColor + ' op=' + gs.opacity + ' vis=' + gs.visibility + ' z=' + gs.zIndex + ' txt="' + g.textContent.trim().replace(/\s+/g, ' ').slice(0, 40) + '"');
+              });
+            });
+            var inputs = document.querySelectorAll('input:not([type=hidden])');
+            out.push('--- INPUTS ' + inputs.length);
+            Array.prototype.forEach.call(inputs, function (x) { var xs = getComputedStyle(x); out.push(' INPUT type=' + x.type + ' name=' + x.name + ' ph="' + x.placeholder + '" ' + R(x) + ' d=' + xs.display + ' vis=' + xs.visibility + ' op=' + xs.opacity + ' col=' + xs.color + ' bg=' + xs.backgroundColor); });
+            var a = inputs[0] || document.querySelector('iframe, button, [role=button]');
+            if (a) {
+              out.push('--- CHAIN from ' + tag(a));
+              for (el = a; el && el !== document; el = el.parentElement) out.push(' ' + tag(el) + ' ' + R(el) + ' ' + sty(el));
+            }
+            var all = document.querySelectorAll('body *');
+            out.push('--- POSITIONED fixed/absolute covering >50% viewport');
+            for (i = 0, n = 0; i < all.length && n < 30; i++) {
+              el = all[i]; s = getComputedStyle(el);
+              if (s.position !== 'fixed' && s.position !== 'absolute') continue;
+              r = el.getBoundingClientRect(); if (r.width < innerWidth * 0.5 || r.height < innerHeight * 0.5) continue;
+              n++; out.push(' ' + tag(el) + ' ' + R(el) + ' bg=' + s.backgroundColor + ' z=' + s.zIndex + ' pe=' + s.pointerEvents + ' op=' + s.opacity + ' vis=' + s.visibility + ' d=' + s.display + ' hasForm=' + (a ? el.contains(a) : '-'));
+            }
+            out.push('--- BIG LIGHT BOXES (opaque light bg, >70% viewport)');
+            for (i = 0, n = 0; i < all.length && n < 20; i++) {
+              el = all[i]; s = getComputedStyle(el); var bg = s.backgroundColor;
+              var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(bg); if (!m) continue;
+              if (+m[1] < 220 || +m[2] < 220 || +m[3] < 220 || (m[4] !== undefined && +m[4] < 0.5)) continue;
+              r = el.getBoundingClientRect(); if (r.width < innerWidth * 0.7 || r.height < innerHeight * 0.7) continue;
+              n++; out.push(' ' + tag(el) + ' ' + R(el) + ' bg=' + bg + ' pos=' + s.position + ' z=' + s.zIndex + ' op=' + s.opacity + ' hasForm=' + (a ? el.contains(a) : '-'));
+            }
+            out.push('--- PAINT STACK (elementsFromPoint, top first)');
+            [[0.5, 0.3], [0.5, 0.5], [0.2, 0.7], [0.8, 0.12], [0.5, 0.9]].forEach(function (p) {
+              var x = innerWidth * p[0], y = innerHeight * p[1], st = document.elementsFromPoint(x, y);
+              out.push(' @' + Math.round(x) + ',' + Math.round(y) + ': ' + st.slice(0, 7).map(function (e) { return tag(e) + '(' + getComputedStyle(e).backgroundColor + ')'; }).join(' > '));
+            });
+            out.push('--- TEXT (innerText, 300 chars)');
+            out.push(((document.body.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 300));
+            out.push('--- UNCLIP ' + (window.__omUnclip || 'not run'));
+            out.push('--- HTML (body outerHTML, 2500 chars)');
+            out.push(document.body.outerHTML.replace(/\s+/g, ' ').slice(0, 2500));
+            return out.join('\n');
+          } catch (e) { return 'DIAG FAILED: ' + e; }
+        })()
+    """.trimIndent()
+
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
     const val DEBUG_TOASTS = false
 

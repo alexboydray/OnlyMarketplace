@@ -1,7 +1,10 @@
 package com.alex.onlymarketplace
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
+import org.json.JSONArray
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.ConsoleMessage
@@ -39,6 +42,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var debugLog: TextView
     private lateinit var authStrip: TextView
     private val logLines = ArrayDeque<String>()
+    private val jsErrors = ArrayDeque<String>()   // console errors on the current page
+    private var fullReport = ""                   // diagnostic for the current auth page
     private var mobileUa = ""
 
     /**
@@ -104,10 +109,17 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(0xCC000000.toInt())
             setTextColor(0xFFFFFFFF.toInt())
             textSize = 11f
-            maxLines = 3
+            maxLines = 4
             setPadding(24, 8, 24, 8)
             visibility = View.GONE
-            setOnClickListener { visibility = View.GONE }
+            setOnClickListener {
+                visibility = View.GONE
+                if (fullReport.isNotEmpty()) {
+                    val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace diagnostic", fullReport))
+                    Toast.makeText(this@MainActivity, "Report copied — paste it into the chat", Toast.LENGTH_LONG).show()
+                }
+            }
         }
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -239,6 +251,7 @@ class MainActivity : ComponentActivity() {
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
             note("START ${url.take(100)}")
+            jsErrors.clear()
             // Belt and braces: form posts and server redirects can skip shouldOverrideUrlLoading.
             val uri = Uri.parse(url)
             if (AUTH_PATHS.any { uri.path.orEmpty().startsWith(it) }) lastAuthPageAt = System.currentTimeMillis()
@@ -319,11 +332,16 @@ class MainActivity : ComponentActivity() {
                 view.postDelayed(unclip, 800)
                 view.postDelayed(unclip, 2500)
                 if (Marketplace.AUTH_DIAG) view.postDelayed({
-                    view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
-                        authStrip.text = r.trim('"')
-                        authStrip.visibility = View.VISIBLE
+                    view.evaluateJavascript(Marketplace.DIAG_FULL_JS) { raw ->
+                        val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
+                        fullReport = "OnlyMarketplace ${BuildConfig.VERSION_NAME}\nJS ERRORS (${jsErrors.size}):\n" +
+                            jsErrors.joinToString("\n") { "  $it" } + "\n\n" + body
+                        view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
+                            authStrip.text = r.trim('"') + "\n▶ Tap here to copy the full report, then paste it into the chat"
+                            authStrip.visibility = View.VISIBLE
+                        }
                     }
-                }, 3000)
+                }, 3500)
             } else {
                 authStrip.visibility = View.GONE
             }
@@ -338,9 +356,13 @@ class MainActivity : ComponentActivity() {
         private var jsErrorsShown = 0
 
         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-            if (Marketplace.DEBUG_TOASTS && msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR && jsErrorsShown < 3) {
-                jsErrorsShown++
-                note("JS ${msg.message().take(90)} @ ${msg.sourceId().substringAfterLast('/').take(40)}:${msg.lineNumber()}")
+            if (msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                jsErrors.addLast("${msg.message().take(300)} @ ${msg.sourceId().substringAfterLast('/').take(60)}:${msg.lineNumber()}")
+                while (jsErrors.size > 25) jsErrors.removeFirst()
+                if (Marketplace.DEBUG_TOASTS && jsErrorsShown < 3) {
+                    jsErrorsShown++
+                    note("JS ${msg.message().take(90)} @ ${msg.sourceId().substringAfterLast('/').take(40)}:${msg.lineNumber()}")
+                }
             }
             return false
         }
