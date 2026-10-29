@@ -180,7 +180,7 @@ object Marketplace {
           // glyphs, badge digits and "+". A full-width strip 40–130px tall with that kind of
           // text and a handful of tappable children is the bar. Only checked near the top of the
           // tree (bars live there) so it stays cheap.
-          var GLYPHS_ONLY = /^[\d+\s•-]*$/;
+          var GLYPHS_ONLY = /^[^A-Za-z]*$/;
           // The bar carries hidden labels naming the tabs; ignore those words when testing.
           var TAB_WORDS = /Marketplace|Home|Friends|Messenger|Messages|Video|Reels|Watch|Notifications|Menu|Dating|Groups/g;
           function iconsOnly(el) { return GLYPHS_ONLY.test(el.textContent.replace(TAB_WORDS, '')); }
