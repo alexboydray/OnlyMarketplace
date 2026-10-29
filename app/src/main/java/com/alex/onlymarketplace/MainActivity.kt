@@ -314,10 +314,14 @@ class MainActivity : ComponentActivity() {
             }
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
             val uri = Uri.parse(url)
-            // Wrong identity for where we ended up (e.g. just logged in, landed on Marketplace
-            // as "desktop")? Switch and reload so the page comes back in the right layout.
-            if (Marketplace.isFacebookHost(uri) && applyUaFor(uri)) {
-                view.postDelayed({ view.loadUrl(if (Marketplace.isLoggedIn()) Marketplace.HOME else url) }, 100)
+            // Exactly one case switches identity here: we just logged in (desktop identity still
+            // on) and landed on Marketplace. Switch to mobile and reload. Nothing else — the
+            // logged-out Marketplace page rewrites its own address, and reacting to that caused
+            // an endless reload loop alternating identities.
+            if (Marketplace.isLoggedIn() && webView.settings.userAgentString != mobileUa &&
+                uri.path.orEmpty().startsWith("/marketplace")) {
+                applyUaFor(uri)
+                view.postDelayed({ view.loadUrl(Marketplace.HOME) }, 100)
                 return
             }
             if (uri.path.orEmpty().startsWith("/marketplace")) {
