@@ -296,11 +296,11 @@ class MainActivity : ComponentActivity() {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
                 // Temporary: one toast showing where the page title sits relative to the tab bar.
                 view.postDelayed({
-                    view.evaluateJavascript("window.__omTitle || ''") { r ->
+                    view.evaluateJavascript("(window.__omBarInfo || 'no bar info') + '  ####  ' + (window.__omTitle || 'no title info')") { r ->
                         if (r.length > 4 && !titleReported) {
                             titleReported = true
-                            Toast.makeText(this@MainActivity, r.trim('"'), Toast.LENGTH_LONG).show()
-                            view.postDelayed({ Toast.makeText(this@MainActivity, r.trim('"'), Toast.LENGTH_LONG).show() }, 3600)
+                            debugLog.text = r.trim('"').replace("\\u003C", "<")
+                            debugLog.visibility = View.VISIBLE // tap the strip to dismiss
                         }
                     }
                 }, 2200)

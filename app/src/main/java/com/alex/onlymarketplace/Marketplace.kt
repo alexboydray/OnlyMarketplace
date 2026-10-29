@@ -137,15 +137,20 @@ object Marketplace {
               if (tabs.length < 4) continue;
               var labels = Array.prototype.map.call(tabs, function (t) { return (t.getAttribute('aria-label') || '').toLowerCase(); }).join('|');
               if (!/\b(feed|friends|notifications|video|watch|reels|menu)\b/.test(labels)) continue;
-              // The Marketplace header lives inside this same container, so hide only the tabs
-              // and let the container shrink around whatever is left.
               var tl = lists[i];
-              for (var t = 0; t < tabs.length; t++) hide(tabs[t]);
-              tl.style.setProperty('height', 'auto', 'important');
-              tl.style.setProperty('min-height', '0', 'important');
-              // Nothing left but the tabs? Then collapse the container entirely.
-              var left = Array.prototype.filter.call(tl.children, function (k) { return k.style.display !== 'none' && k.getBoundingClientRect().height > 0; });
-              if (left.length === 0) hide(tl);
+              if (!window.__omBarInfo) {
+                // Diagnostic: the bar's parent and that parent's children (siblings of the bar).
+                var p = tl.parentElement, ps = p ? getComputedStyle(p) : null, pr = p ? p.getBoundingClientRect() : null;
+                var sib = p ? Array.prototype.map.call(p.children, function (k) {
+                  var ks = getComputedStyle(k), kr = k.getBoundingClientRect();
+                  return (k === tl ? '*' : '') + k.tagName + '.' + String(k.className).slice(0, 10) + ' ' + Math.round(kr.height) + 'h@' + Math.round(kr.top) + ' ' + ks.position;
+                }).join(' | ') : '';
+                window.__omBarInfo = 'parent ' + (p ? p.tagName + '.' + String(p.className).slice(0, 12) + ' ' + Math.round(pr.height) + 'h ' + ps.position + ' ov=' + ps.overflow : '-') + ' :: ' + sib;
+              }
+              // Layout-neutral: blank the tabs but keep the bar's space (shrinking it clips the
+              // Marketplace header in Facebook's virtualized layout).
+              for (var t = 0; t < tabs.length; t++) tabs[t].style.setProperty('visibility', 'hidden', 'important');
+              tl.style.setProperty('pointer-events', 'none', 'important');
               window.__omBar = tl;
             }
           }
