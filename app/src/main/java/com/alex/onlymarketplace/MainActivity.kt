@@ -1,6 +1,7 @@
 package com.alex.onlymarketplace
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -67,6 +68,34 @@ class MainActivity : ComponentActivity() {
         WebSettingsCompat.setUserAgentMetadata(webView.settings, meta)
     }
 
+    /** Names of the cookies Facebook has set, for the diagnostic. Values are never read out. */
+    private fun cookieNames(): String {
+        val raw = CookieManager.getInstance().getCookie("https://www.facebook.com").orEmpty()
+        val names = raw.split(';').map { it.substringBefore('=').trim() }.filter { it.isNotEmpty() }
+        return if (names.isEmpty()) "(none)" else names.sorted().joinToString(", ")
+    }
+
+    /** Manual, user-triggered only: wipe all site data and start over logged out. */
+    private fun confirmClearSiteData() {
+        AlertDialog.Builder(this)
+            .setTitle("Clear Facebook site data?")
+            .setMessage("Removes all cookies and stored data for Facebook in this app. You'll be logged out and start fresh.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear") { _, _ ->
+                CookieManager.getInstance().removeAllCookies {
+                    CookieManager.getInstance().flush()
+                    WebStorage.getInstance().deleteAllData()
+                    webView.clearCache(true)
+                    webView.clearHistory()
+                    Marketplace.allowRootUntil = 0L
+                    authStrip.visibility = View.GONE
+                    Toast.makeText(this, "Site data cleared", Toast.LENGTH_SHORT).show()
+                    webView.loadUrl(Marketplace.HOME)
+                }
+            }
+            .show()
+    }
+
     /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
     private fun note(msg: String) {
         if (!Marketplace.DEBUG_TOASTS) return
@@ -120,6 +149,7 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this@MainActivity, "Report copied — paste it into the chat", Toast.LENGTH_LONG).show()
                 }
             }
+            setOnLongClickListener { confirmClearSiteData(); true }
         }
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -335,10 +365,13 @@ class MainActivity : ComponentActivity() {
                 if (Marketplace.AUTH_DIAG) view.postDelayed({
                     view.evaluateJavascript(Marketplace.DIAG_FULL_JS) { raw ->
                         val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
-                        fullReport = "OnlyMarketplace ${BuildConfig.VERSION_NAME}\nJS ERRORS (${jsErrors.size}):\n" +
+                        fullReport = "OnlyMarketplace ${BuildConfig.VERSION_NAME}\n" +
+                            "COOKIES (names only): ${cookieNames()}\n" +
+                            "APP THINKS LOGGED IN: ${Marketplace.isLoggedIn()}\n" +
+                            "JS ERRORS (${jsErrors.size}):\n" +
                             jsErrors.joinToString("\n") { "  $it" } + "\n\n" + body
                         view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
-                            authStrip.text = r.trim('"') + "\n▶ Tap here to copy the full report, then paste it into the chat"
+                            authStrip.text = r.trim('"') + "\n▶ Tap: copy full report (paste it in chat) · Long-press: clear Facebook site data"
                             authStrip.visibility = View.VISIBLE
                         }
                     }
