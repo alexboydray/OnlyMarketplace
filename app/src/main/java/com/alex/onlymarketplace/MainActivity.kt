@@ -177,6 +177,8 @@ class MainActivity : ComponentActivity() {
         private var lastBounce = ""
         private var lastBounceAt = 0L
         private val recentBounces = ArrayDeque<Long>()
+        private var lastAuthPageAt = 0L // last time a login / checkpoint / captcha page was seen
+        private val AUTH_PATHS = listOf("/login", "/checkpoint", "/two_step_verification", "/recover", "/auth", "/x/", "/unified", "/privacy")
 
         /** Send the view back to Marketplace. Posted so it never collides with the navigation that triggered it. */
         private fun bounce(view: WebView, from: String, target: String = Marketplace.HOME) {
@@ -189,7 +191,8 @@ class MainActivity : ComponentActivity() {
             // Facebook's side but the cookie is still here. Forget it and go to the login form.
             recentBounces.addLast(now)
             while (recentBounces.size > 0 && now - recentBounces.first() > 15000) recentBounces.removeFirst()
-            if (target == Marketplace.HOME && recentBounces.size >= 4 && Uri.parse(from).path.orEmpty().trimEnd('/').isEmpty()) {
+            val justAuthenticated = now - lastAuthPageAt < 90_000
+            if (!justAuthenticated && target == Marketplace.HOME && recentBounces.size >= 6 && Uri.parse(from).path.orEmpty().trimEnd('/').isEmpty()) {
                 recentBounces.clear()
                 Marketplace.forgetSession()
                 Toast.makeText(this@MainActivity, "Facebook session expired — please log in again", Toast.LENGTH_LONG).show()
@@ -215,6 +218,7 @@ class MainActivity : ComponentActivity() {
             note("START ${url.take(100)}")
             // Belt and braces: form posts and server redirects can skip shouldOverrideUrlLoading.
             val uri = Uri.parse(url)
+            if (AUTH_PATHS.any { uri.path.orEmpty().startsWith(it) }) lastAuthPageAt = System.currentTimeMillis()
             if (!Marketplace.isFacebookHost(uri) || Marketplace.loginRedirect(uri) != null) return
             if (!Marketplace.isAllowed(uri)) bounce(view, url)
         }
