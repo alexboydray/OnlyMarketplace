@@ -67,6 +67,38 @@ object Marketplace {
             el.style.setProperty('max-height', 'none', 'important');
             opened++;
           }
+          // The form is laid out fine but painted over: Facebook's full-screen loading overlay
+          // stays up when its script crashes. Anchor on the biggest form element (field, captcha
+          // iframe, button), then hide every full-viewport fixed/absolute box that doesn't
+          // contain it. Hit-testing can't find these (pointer-events: none), so measure instead.
+          var anchor = null, best = 0;
+          var cands = document.querySelectorAll('input:not([type=hidden]), iframe, button, [role=button]');
+          for (var c = 0; c < cands.length; c++) {
+            var cr = cands[c].getBoundingClientRect(), area = cr.width * cr.height;
+            if (area > best) { best = area; anchor = cands[c]; }
+          }
+          var killed = [];
+          if (anchor) {
+            var boxes = document.querySelectorAll('body *');
+            for (var b = 0; b < boxes.length; b++) {
+              var box = boxes[b];
+              if (box === anchor || box.contains(anchor) || anchor.contains(box)) continue;
+              var bs = getComputedStyle(box);
+              if (bs.position !== 'fixed' && bs.position !== 'absolute') continue;
+              var br = box.getBoundingClientRect();
+              if (br.width < innerWidth * 0.85 || br.height < innerHeight * 0.6) continue;
+              killed.push(box.tagName + (box.id ? '#' + box.id : '') + ' ' + Math.round(br.width) + 'x' + Math.round(br.height) + ' bg=' + bs.backgroundColor + ' z=' + bs.zIndex + ' pe=' + bs.pointerEvents);
+              box.style.setProperty('display', 'none', 'important');
+            }
+            // And make sure nothing on the anchor's own chain hides it.
+            for (var e = anchor; e && e !== document.documentElement; e = e.parentElement) {
+              var es = getComputedStyle(e);
+              if (es.visibility !== 'visible') e.style.setProperty('visibility', 'visible', 'important');
+              if (es.opacity === '0') e.style.setProperty('opacity', '1', 'important');
+              if (es.display === 'none') e.style.setProperty('display', 'block', 'important');
+            }
+          }
+          window.__omUnclip = 'opened=' + opened + ' anchor=' + (anchor ? anchor.tagName + ' ' + Math.round(best) + 'px²' : 'none') + ' killed=[' + killed.join(' ; ') + ']';
           return opened;
         })()
     """.trimIndent()
@@ -80,7 +112,7 @@ object Marketplace {
           var t = ((document.body && document.body.innerText) || '').replace(/\s+/g, ' ').trim();
           return document.title.slice(0, 22) + ' | page h=' + document.documentElement.scrollHeight + ' text=' + t.length +
             ' input=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) : 'none') +
-            ' | ' + t.slice(0, 70);
+            ' | ' + (window.__omUnclip || 'unclip not run');
         })()
     """.trimIndent()
 
