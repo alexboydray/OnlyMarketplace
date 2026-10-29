@@ -138,39 +138,28 @@ object Marketplace {
               var labels = Array.prototype.map.call(tabs, function (t) { return (t.getAttribute('aria-label') || '').toLowerCase(); }).join('|');
               if (!/\b(feed|friends|notifications|video|watch|reels|menu)\b/.test(labels)) continue;
               var tl = lists[i];
-              if (!window.__omBarInfo) {
-                // Diagnostic: the bar's parent and that parent's children (siblings of the bar).
-                var p = tl.parentElement, ps = p ? getComputedStyle(p) : null, pr = p ? p.getBoundingClientRect() : null;
-                var sib = p ? Array.prototype.map.call(p.children, function (k) {
-                  var ks = getComputedStyle(k), kr = k.getBoundingClientRect();
-                  return (k === tl ? '*' : '') + k.tagName + '.' + String(k.className).slice(0, 10) + ' ' + Math.round(kr.height) + 'h@' + Math.round(kr.top) + ' ' + ks.position;
-                }).join(' | ') : '';
-                window.__omBarInfo = 'parent ' + (p ? p.tagName + '.' + String(p.className).slice(0, 12) + ' ' + Math.round(pr.height) + 'h ' + ps.position + ' ov=' + ps.overflow : '-') + ' :: ' + sib;
+              if (tl.getAttribute('data-om-done')) continue;
+              // The container holds two rows: the icon tabs on top and the page header
+              // ("< Marketplace", search) below. Measure the icon row, hide the tabs, shrink the
+              // container by that much and slide the remaining children up into the gap.
+              var tr = tl.getBoundingClientRect(), rowBottom = tr.top;
+              for (var t = 0; t < tabs.length; t++) {
+                var b = tabs[t].getBoundingClientRect().bottom;
+                if (b > rowBottom) rowBottom = b;
               }
-              // Layout-neutral: blank the tabs but keep the bar's space (shrinking it clips the
-              // Marketplace header in Facebook's virtualized layout).
-              for (var t = 0; t < tabs.length; t++) tabs[t].style.setProperty('visibility', 'hidden', 'important');
-              tl.style.setProperty('pointer-events', 'none', 'important');
-              window.__omBar = tl;
-            }
-          }
-          // One-time report of where the page title sits relative to the tab bar.
-          function reportTitle() {
-            if (window.__omReported) return;
-            var leaves = document.querySelectorAll('div, span, h1, h2'), out = [];
-            for (var i = 0; i < leaves.length && out.length < 2; i++) {
-              var n = leaves[i];
-              if (n.children.length !== 0 || n.textContent.trim() !== 'Marketplace') continue;
-              var r = n.getBoundingClientRect();
-              var chain = [], e = n;
-              while (e && e !== document.body && chain.length < 6) {
-                var rr = e.getBoundingClientRect(), d = getComputedStyle(e).display;
-                chain.push(e.tagName + (e.getAttribute('role') ? '[' + e.getAttribute('role') + ']' : '') + ' ' + Math.round(rr.height) + 'h@' + Math.round(rr.top) + (d === 'none' ? ' NONE' : ''));
-                e = e.parentElement;
+              var rowH = Math.round(rowBottom - tr.top);
+              tl.setAttribute('data-om-done', '1');
+              for (var t2 = 0; t2 < tabs.length; t2++) hide(tabs[t2]);
+              if (rowH > 0 && rowH < tr.height - 10) {
+                tl.style.setProperty('height', Math.round(tr.height - rowH) + 'px', 'important');
+                Array.prototype.forEach.call(tl.children, function (k) {
+                  if (k.getAttribute('role') === 'tab' || k.querySelector('[role="tab"]')) return;
+                  k.style.setProperty('transform', 'translateY(-' + rowH + 'px)', 'important');
+                });
+              } else {
+                hide(tl); // nothing but tabs in it
               }
-              out.push(Math.round(r.width) + 'x' + Math.round(r.height) + ' inBar=' + !!(window.__omBar && window.__omBar.contains(n)) + ' :: ' + chain.join(' < '));
             }
-            if (out.length) { window.__omReported = true; window.__omTitle = out.join('  ////  '); }
           }
           // Ad card: climb to the grid cell (last ancestor narrower than the page), hide it,
           // then collapse any wrapper left with nothing visible so there is no gap.
@@ -214,7 +203,6 @@ object Marketplace {
           }
           window.__omScan = scan;
           scan(document.body);
-          setTimeout(reportTitle, 1500); setTimeout(reportTitle, 4000); setTimeout(reportTitle, 8000);
 
           var pending = [];
           new MutationObserver(function (records) {

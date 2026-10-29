@@ -294,16 +294,6 @@ class MainActivity : ComponentActivity() {
             }
             if (uri.path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
-                // Temporary: one toast showing where the page title sits relative to the tab bar.
-                for (delay in listOf(2500L, 5000L, 9000L, 15000L)) view.postDelayed({
-                    if (titleReported) return@postDelayed
-                    view.evaluateJavascript("(window.__omBarInfo || '') + '  ####  ' + (window.__omTitle || '')") { r ->
-                        if (!r.contains("parent") || titleReported) return@evaluateJavascript
-                        titleReported = true
-                        debugLog.text = r.trim('"').replace("\\u003C", "<")
-                        debugLog.visibility = View.VISIBLE // tap the strip to dismiss
-                    }
-                }, delay)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
