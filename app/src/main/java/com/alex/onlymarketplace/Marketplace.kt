@@ -152,10 +152,18 @@ object Marketplace {
               for (var t2 = 0; t2 < tabs.length; t2++) hide(tabs[t2]);
               if (rowH > 0 && rowH < tr.height - 10) {
                 tl.style.setProperty('height', Math.round(tr.height - rowH) + 'px', 'important');
-                Array.prototype.forEach.call(tl.children, function (k) {
-                  if (k.getAttribute('role') === 'tab' || k.querySelector('[role="tab"]')) return;
-                  k.style.setProperty('transform', 'translateY(-' + rowH + 'px)', 'important');
-                });
+                // Walk up from the tabs to the container; at every level, slide up each sibling
+                // that doesn't itself contain a tab (the header, wherever it is nested).
+                var level = tabs[0].parentElement;
+                while (level && level !== tl.parentElement) {
+                  Array.prototype.forEach.call(level.children, function (k) {
+                    if (k.getAttribute('role') === 'tab' || k.querySelector('[role="tab"]')) return;
+                    k.style.setProperty('transform', 'translateY(-' + rowH + 'px)', 'important');
+                  });
+                  level.style.setProperty('overflow', 'visible', 'important');
+                  if (level === tl) break;
+                  level = level.parentElement;
+                }
               } else {
                 hide(tl); // nothing but tabs in it
               }
