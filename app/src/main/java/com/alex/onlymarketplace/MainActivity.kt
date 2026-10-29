@@ -45,6 +45,8 @@ class MainActivity : ComponentActivity() {
     private val logLines = ArrayDeque<String>()
     private val jsErrors = ArrayDeque<String>()   // console errors on the current page
     private var fullReport = ""                   // diagnostic for the current auth page
+    private val reports = ArrayDeque<Pair<Int, String>>() // last few auth pages, keyed by page id
+    private var pageSeq = 0
     private var mobileUa = ""
 
     /**
@@ -362,20 +364,34 @@ class MainActivity : ComponentActivity() {
                 unclip()
                 view.postDelayed(unclip, 800)
                 view.postDelayed(unclip, 2500)
-                if (Marketplace.AUTH_DIAG) view.postDelayed({
-                    view.evaluateJavascript(Marketplace.DIAG_FULL_JS) { raw ->
-                        val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
-                        fullReport = "OnlyMarketplace ${BuildConfig.VERSION_NAME}\n" +
-                            "COOKIES (names only): ${cookieNames()}\n" +
-                            "APP THINKS LOGGED IN: ${Marketplace.isLoggedIn()}\n" +
-                            "JS ERRORS (${jsErrors.size}):\n" +
-                            jsErrors.joinToString("\n") { "  $it" } + "\n\n" + body
-                        view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
-                            authStrip.text = r.trim('"') + "\n▶ Tap: copy full report (paste it in chat) · Long-press: clear Facebook site data"
-                            authStrip.visibility = View.VISIBLE
+                if (Marketplace.AUTH_DIAG) {
+                    // One report per page in the login chain (kept for the last 3 pages), each
+                    // captured early and again once the page has settled.
+                    val pageId = ++pageSeq
+                    reports.addLast(pageId to "")
+                    while (reports.size > 3) reports.removeFirst()
+                    val capture = { label: String ->
+                        view.evaluateJavascript(Marketplace.DIAG_FULL_JS) { raw ->
+                            val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
+                            val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} — $label\n" +
+                                "PAGE $url\n" +
+                                "COOKIES (names only): ${cookieNames()}\n" +
+                                "APP THINKS LOGGED IN: ${Marketplace.isLoggedIn()}\n" +
+                                "JS ERRORS (${jsErrors.size}):\n" +
+                                jsErrors.joinToString("\n") { "  $it" } + "\n\n" + body
+                            val idx = reports.indexOfFirst { it.first == pageId }
+                            if (idx >= 0) reports[idx] = pageId to text
+                            val filled = reports.map { it.second }.filter { it.isNotEmpty() }
+                            fullReport = filled.joinToString("\n\n==================== NEXT PAGE ====================\n\n")
+                            view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
+                                authStrip.text = r.trim('"') + "\n▶ Tap: copy report (${filled.size} pages) and paste in chat · Long-press: clear Facebook site data"
+                                authStrip.visibility = View.VISIBLE
+                            }
                         }
                     }
-                }, 3500)
+                    view.postDelayed({ capture("at 4s") }, 4000)
+                    view.postDelayed({ capture("at 9s") }, 9000)
+                }
             } else {
                 authStrip.visibility = View.GONE
             }
@@ -391,8 +407,18 @@ class MainActivity : ComponentActivity() {
 
         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
             if (msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                jsErrors.addLast("${msg.message().take(300)} @ ${msg.sourceId().substringAfterLast('/').take(60)}:${msg.lineNumber()}")
+                jsErrors.addLast("${msg.message().take(300)} @ ${msg.sourceId().take(200)}:${msg.lineNumber()}")
                 while (jsErrors.size > 25) jsErrors.removeFirst()
+                // For a crash in one of Facebook's scripts, grab the code around that line so
+                // the report shows what it was looking for. Done in the page (same origin rules).
+                if (msg.sourceId().startsWith("http") && msg.message().contains("TypeError")) {
+                    val src = msg.sourceId().replace("'", "\\'")
+                    webView.evaluateJavascript(
+                        "fetch('$src').then(r=>r.text()).then(t=>{var L=t.split('\\n');var n=${msg.lineNumber()};" +
+                        "window.__omSnippet=(window.__omSnippet||'')+'\\n--- ' + '$src'.slice(-40) + ':' + n + '\\n' + L.slice(Math.max(0,n-3),n+2).join('\\n').slice(0,1500);}).catch(e=>{window.__omSnippet='fetch failed: '+e;});",
+                        null
+                    )
+                }
                 if (Marketplace.DEBUG_TOASTS && jsErrorsShown < 3) {
                     jsErrorsShown++
                     note("JS ${msg.message().take(90)} @ ${msg.sourceId().substringAfterLast('/').take(40)}:${msg.lineNumber()}")

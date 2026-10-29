@@ -24,17 +24,20 @@ object Marketplace {
      * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
      * hand off to the native app. Skip it and go straight to the web login form instead.
      */
-    private var lastLoginRedirectAt = 0L
+    private val loginRedirects = ArrayDeque<Long>()
 
     fun loginRedirect(uri: Uri): String? {
         if (!uri.path.orEmpty().startsWith("/unified/login_via")) return null
-        // If Facebook sends us straight back here, don't ping-pong: let the interstitial load
-        // (it offers "log in in browser" itself).
         val now = System.currentTimeMillis()
-        if (now - lastLoginRedirectAt < 10_000) return null
-        lastLoginRedirectAt = now
-        val next = uri.getQueryParameter("next") ?: HOME
-        return "https://m.facebook.com/login/?next=" + Uri.encode(next)
+        while (loginRedirects.isNotEmpty() && now - loginRedirects.first() > 15_000) loginRedirects.removeFirst()
+        // The interstitial is an empty shell in a WebView (its UI never renders). The real
+        // login form is the logged-out home page with ?next=. Go there first; if Facebook
+        // sends us back here, try /login/; a third time, give up and let it load.
+        val attempt = loginRedirects.size
+        if (attempt >= 2) return null
+        loginRedirects.addLast(now)
+        val next = Uri.encode(uri.getQueryParameter("next") ?: HOME)
+        return if (attempt == 0) "https://m.facebook.com/?next=$next" else "https://m.facebook.com/login/?next=$next"
     }
 
     /**
@@ -197,6 +200,8 @@ object Marketplace {
             out.push('--- TEXT (innerText, 300 chars)');
             out.push(((document.body.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 300));
             out.push('--- UNCLIP ' + (window.__omUnclip || 'not run'));
+            out.push('--- CRASH SITE (code around the JS error, if any)' + (window.__omSnippet || '\nnone'));
+            out.push('--- SCRIPTS ' + document.scripts.length + ' total, external: ' + Array.prototype.filter.call(document.scripts, function (s) { return s.src; }).map(function (s) { return s.src.split('/').pop().slice(0, 40); }).join(', '));
             out.push('--- HTML (body outerHTML, 2500 chars)');
             out.push(document.body.outerHTML.replace(/\s+/g, ' ').slice(0, 2500));
             return out.join('\n');
