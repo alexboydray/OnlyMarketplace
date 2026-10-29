@@ -10,31 +10,15 @@ import android.webkit.CookieManager
 object Marketplace {
 
     /** Bump to make the next launch wipe all site data once (fresh browser identity). */
-    const val RESET_GENERATION = 1
+    const val RESET_GENERATION = 2 // 2: switched to a single mobile identity
 
     const val HOME = "https://m.facebook.com/marketplace/"
-    const val LOGIN = "https://www.facebook.com/login/?next=$HOME"
+    const val LOGIN = "https://m.facebook.com/login/?next=$HOME"
 
     /** True once Facebook has set its logged-in user cookie. */
     fun isLoggedIn(): Boolean =
         CookieManager.getInstance().getCookie("https://www.facebook.com")
             ?.contains("c_user=") == true
-
-    /**
-     * Facebook's session can expire server-side while the login cookie is still on the phone.
-     * Then Marketplace keeps redirecting to "/" (the login page) and we keep blocking it.
-     * Clearing the session cookies makes [isLoggedIn] false so the login page is allowed again.
-     */
-    fun forgetSession() {
-        val cm = CookieManager.getInstance()
-        for (host in listOf("https://www.facebook.com", "https://m.facebook.com", "https://facebook.com")) {
-            for (name in listOf("c_user", "xs", "fr", "presence")) {
-                cm.setCookie(host, "$name=; Max-Age=0; Path=/; Domain=.facebook.com")
-                cm.setCookie(host, "$name=; Max-Age=0; Path=/")
-            }
-        }
-        cm.flush()
-    }
 
     /**
      * Facebook's "log in via the Facebook app" interstitial (/unified/login_via/app/) tries to
@@ -43,18 +27,40 @@ object Marketplace {
     fun loginRedirect(uri: Uri): String? {
         if (!uri.path.orEmpty().startsWith("/unified/login_via")) return null
         val next = uri.getQueryParameter("next") ?: HOME
-        return "https://www.facebook.com/login/?next=" + Uri.encode(next)
+        return "https://m.facebook.com/login/?next=" + Uri.encode(next)
     }
 
     /**
-     * Facebook's mobile login page relies on a script that crashes inside a WebView and leaves
-     * the page collapsed. The desktop login page is a plain form, so while logged out and off
-     * Marketplace we present a desktop browser, then switch back to mobile once signed in.
+     * Facebook's mobile login / checkpoint pages are built from fixed-height blocks (#viewport,
+     * MContainer divs with inline heights and overflow hidden) that a script is supposed to size
+     * once the page loads. That script crashes inside a WebView, so the blocks stay at their
+     * initial near-zero height and clip everything. This opens every such block so the page
+     * lays out naturally. Only ever run on non-Marketplace pages.
      */
-    const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-
-    fun wantsDesktop(uri: Uri): Boolean =
-        !isLoggedIn() && isFacebookHost(uri) && !uri.path.orEmpty().startsWith("/marketplace")
+    val UNCLIP_JS = """
+        (function () {
+          var id = 'om-unclip';
+          if (!document.getElementById(id)) {
+            var s = document.createElement('style');
+            s.id = id;
+            s.textContent = [
+              'html, body, #viewport, #root, #screen-root { height: auto !important; min-height: 100vh !important; overflow: visible !important; }',
+              '[data-type="container"], [data-mcomponent="MContainer"], .m.vertically-snappable, #viewport > div { height: auto !important; min-height: 0 !important; overflow: visible !important; }',
+              'body { position: static !important; }'
+            ].join('\n');
+            (document.head || document.documentElement).appendChild(s);
+          }
+          // Inline heights beat a stylesheet only if !important isn't used; it is, but also
+          // clear them directly so measurements elsewhere are sane.
+          var all = document.querySelectorAll('[style*="height"]');
+          for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            if (el.tagName === 'IMG' || el.tagName === 'SVG' || el.tagName === 'CANVAS' || el.tagName === 'IFRAME') continue;
+            if (/^\d+px$/.test(el.style.height) && parseInt(el.style.height, 10) < 60 && el.children.length > 0) el.style.height = 'auto';
+          }
+          return all.length;
+        })()
+    """.trimIndent()
 
     /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
     const val DEBUG_TOASTS = false

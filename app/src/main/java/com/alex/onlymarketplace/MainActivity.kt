@@ -41,22 +41,9 @@ class MainActivity : ComponentActivity() {
     private var mobileUa = ""
 
     /**
-     * Pick the browser identity for a URL: desktop for login/checkpoint pages while logged out,
-     * mobile everywhere else. Returns true if it changed, so the caller can reload with it.
-     */
-    private fun applyUaFor(uri: Uri): Boolean {
-        val want = if (Marketplace.wantsDesktop(uri)) Marketplace.DESKTOP_UA else mobileUa
-        if (webView.settings.userAgentString == want) return false
-        webView.settings.userAgentString = want
-        setClientHints(mobile = want == mobileUa) // keep Sec-CH-UA consistent with the UA string
-        note(if (want == mobileUa) "UA → mobile" else "UA → desktop")
-        return true
-    }
-
-    /**
-     * Client hints (Sec-CH-UA) announce "Android WebView" regardless of the UA string, and
-     * must agree with whichever identity the UA string claims, or Facebook's security checks
-     * see a browser that contradicts itself.
+     * Client hints (Sec-CH-UA) announce "Android WebView" regardless of the UA string; make
+     * them say what Chrome on this phone would say. The app is one identity (Android phone)
+     * everywhere — it never impersonates a desktop.
      */
     private fun setClientHints(mobile: Boolean) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return
@@ -223,7 +210,6 @@ class MainActivity : ComponentActivity() {
                 recentBounces.clear()
                 note("LOOP → letting Facebook's page show")
                 view.visibility = View.VISIBLE
-                applyUaFor(Uri.parse(Marketplace.LOGIN))
                 view.loadUrl(Marketplace.LOGIN)
                 return
             }
@@ -236,7 +222,7 @@ class MainActivity : ComponentActivity() {
             // Cover the view so the blocked page never flashes; onPageFinished uncovers it.
             view.visibility = View.INVISIBLE
             view.postDelayed({ view.visibility = View.VISIBLE }, 4000) // safety net if the load stalls
-            view.post { view.stopLoading(); applyUaFor(Uri.parse(target)); view.loadUrl(target) }
+            view.post { view.stopLoading(); view.loadUrl(target) }
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
@@ -265,11 +251,7 @@ class MainActivity : ComponentActivity() {
                 return true
             }
             Marketplace.loginRedirect(url)?.let { bounce(view, url.toString(), it); return true }
-            if (Marketplace.isAllowed(url)) {
-                // Right identity for this page? If it changed, load it ourselves so the new one applies.
-                if (applyUaFor(url)) { view.loadUrl(url.toString()); return true }
-                return false // let the WebView load it
-            }
+            if (Marketplace.isAllowed(url)) return false // let the WebView load it
             bounce(view, url.toString()) // anything else bounces back to Marketplace
             return true
         }
@@ -314,18 +296,16 @@ class MainActivity : ComponentActivity() {
             }
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
             val uri = Uri.parse(url)
-            // Exactly one case switches identity here: we just logged in (desktop identity still
-            // on) and landed on Marketplace. Switch to mobile and reload. Nothing else — the
-            // logged-out Marketplace page rewrites its own address, and reacting to that caused
-            // an endless reload loop alternating identities.
-            if (Marketplace.isLoggedIn() && webView.settings.userAgentString != mobileUa &&
-                uri.path.orEmpty().startsWith("/marketplace")) {
-                applyUaFor(uri)
-                view.postDelayed({ view.loadUrl(Marketplace.HOME) }, 100)
-                return
-            }
             if (uri.path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
+            } else if (Marketplace.isFacebookHost(uri)) {
+                // Login / checkpoint / captcha pages: Facebook's mobile versions arrive in
+                // fixed-height blocks sized by a script that crashes in a WebView, leaving the
+                // page collapsed. Un-collapse them (see UNCLIP_JS); repeat for late renders.
+                val unclip = { view.evaluateJavascript(Marketplace.UNCLIP_JS, null) }
+                unclip()
+                view.postDelayed(unclip, 800)
+                view.postDelayed(unclip, 2500)
             }
             if (Marketplace.DEBUG_TOASTS) {
                 view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
