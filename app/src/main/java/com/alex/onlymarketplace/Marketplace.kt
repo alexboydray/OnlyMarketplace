@@ -170,8 +170,7 @@ object Marketplace {
               }
               out.push(Math.round(r.width) + 'x' + Math.round(r.height) + ' inBar=' + !!(window.__omBar && window.__omBar.contains(n)) + ' :: ' + chain.join(' < '));
             }
-            window.__omReported = true;
-            window.__omTitle = out.join('  ////  ');
+            if (out.length) { window.__omReported = true; window.__omTitle = out.join('  ////  '); }
           }
           // Ad card: climb to the grid cell (last ancestor narrower than the page), hide it,
           // then collapse any wrapper left with nothing visible so there is no gap.
@@ -215,7 +214,7 @@ object Marketplace {
           }
           window.__omScan = scan;
           scan(document.body);
-          setTimeout(reportTitle, 1500);
+          setTimeout(reportTitle, 1500); setTimeout(reportTitle, 4000); setTimeout(reportTitle, 8000);
 
           var pending = [];
           new MutationObserver(function (records) {
