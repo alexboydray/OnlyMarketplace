@@ -210,19 +210,24 @@ object Marketplace {
           window.__omScan = scan;
           scan(document.body);
 
-          var pending = [];
+          // Never compete with scrolling: queue added nodes, and process them only once the
+          // user has paused for a moment, in idle time where the browser offers it.
+          var pending = [], lastScroll = 0;
+          addEventListener('scroll', function () { lastScroll = Date.now(); }, { passive: true, capture: true });
+          function drain() {
+            window.__omTimer = 0;
+            if (!pending.length) return;
+            if (Date.now() - lastScroll < 300) { window.__omTimer = setTimeout(drain, 300); return; }
+            var batch = pending; pending = [];
+            var run = function () { for (var i = 0; i < batch.length; i++) if (batch[i].isConnected) scan(batch[i]); };
+            if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1500 }); else run();
+          }
           new MutationObserver(function (records) {
             for (var r = 0; r < records.length; r++) {
               var added = records[r].addedNodes;
               for (var n = 0; n < added.length; n++) if (added[n].nodeType === 1) pending.push(added[n]);
             }
-            if (pending.length && !window.__omTimer) {
-              window.__omTimer = setTimeout(function () {
-                window.__omTimer = 0;
-                var batch = pending; pending = [];
-                for (var i = 0; i < batch.length; i++) if (batch[i].isConnected) scan(batch[i]);
-              }, 100);
-            }
+            if (pending.length && !window.__omTimer) window.__omTimer = setTimeout(drain, 150);
           }).observe(document.documentElement, { childList: true, subtree: true });
         })();
     """.trimIndent()
