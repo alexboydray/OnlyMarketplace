@@ -66,7 +66,7 @@ object Marketplace {
           return document.title.slice(0, 24) + ' | op=' + cs.opacity + ' vis=' + cs.visibility +
             ' w=' + innerWidth + ' h=' + document.documentElement.scrollHeight + ' sy=' + scrollY +
             ' input@' + (r ? Math.round(r.top) + ',' + Math.round(r.left) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) : 'none') +
-            ' | top=' + (window.__omTop || '-');
+            ' | hid=[' + ((window.__omHid || []).join(' ; ')) + '] top=' + (window.__omTop || '-');
         })()
     """.trimIndent()
 
@@ -230,7 +230,22 @@ object Marketplace {
             }
             return n;
           }
-          function isIconBar(el) { return iconsOnly(el) && glyphCount(el) >= 5 && cellCount(el) >= 5; }
+          // A page title ("Marketplace", "Search Marketplace") is big text; the bar has none.
+          function hasBigText(el) {
+            var leaves = el.querySelectorAll('*');
+            for (var i = 0; i < leaves.length && i < 200; i++) {
+              var n = leaves[i];
+              if (n.children.length !== 0 || !/[A-Za-z]{3,}/.test(n.textContent)) continue;
+              if (parseFloat(getComputedStyle(n).fontSize) >= 18) return true;
+            }
+            return false;
+          }
+          function isIconBar(el) { return iconsOnly(el) && !hasBigText(el) && glyphCount(el) >= 5 && cellCount(el) >= 5; }
+          function describe(el) {
+            return el.tagName + (el.id ? '#' + el.id : '') + ' ' + Math.round(el.getBoundingClientRect().width) + 'x' + Math.round(el.getBoundingClientRect().height) +
+              ' g=' + glyphCount(el) + ' c=' + cellCount(el) + ' "' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 25) + '"';
+          }
+          window.__omHid = [];
           function hideStrip(root) {
             var els = root.querySelectorAll('div, nav, header');
             for (var i = 0; i < els.length; i++) {
@@ -239,6 +254,7 @@ object Marketplace {
               if (!isIconBar(el)) continue;
               var r = el.getBoundingClientRect();
               if (r.width < innerWidth * 0.9 || r.height < 40 || r.height > 130) continue;
+              window.__omHid.push('strip:' + describe(el));
               hide(el);
             }
           }
@@ -254,7 +270,7 @@ object Marketplace {
                 var r = el.getBoundingClientRect();
                 if (k === 0) report.push(el.tagName + (el.id ? '#' + el.id : '') + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' t=' + el.textContent.replace(/\s+/g, '').length);
                 if (r.width >= innerWidth * 0.9 && r.height >= 40 && r.height <= 130) {
-                  if (isIconBar(el)) { hide(el); if (k === 0) report.push('HID'); }
+                  if (isIconBar(el)) { window.__omHid.push('point:' + describe(el)); hide(el); if (k === 0) report.push('HID'); }
                   else if (k === 0) report.push('cells=' + cellCount(el) + ' glyphs=' + glyphCount(el) + ' TEXT:' + el.textContent.replace(/[\d+\s]/g, '').slice(0, 30));
                   break;
                 }
