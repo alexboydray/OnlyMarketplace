@@ -72,7 +72,8 @@ class MainActivity : ComponentActivity() {
 
     /** Temporary: copy the scroll-performance report to the clipboard. */
     private fun copyPerfReport() {
-        webView.evaluateJavascript(Marketplace.PERF_JS) { raw ->
+        webView.evaluateJavascript("(function(){var p=" + Marketplace.PERF_JS + ";var s=window.__omSnap;" +
+            "return p+'\\nPHOTO STRIPS: '+(s?('found='+s.found+' snapped='+s.done+' skipped=['+s.skipped.slice(-5).join(',')+']'):'script not run on this page');})()") { raw ->
             val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
             val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} perf\nURL ${webView.url}\n$body\nJS ERRORS: ${jsErrors.joinToString(" | ")}" +
                 "\nRECENT NAVIGATION (oldest first):\n" + navLog.joinToString("\n") { "  $it" }
@@ -282,7 +283,12 @@ class MainActivity : ComponentActivity() {
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
-            if (Marketplace.isAllowed(uri)) return
+            if (Marketplace.isAllowed(uri)) {
+                if (Regex("/marketplace/item|/photo|/media").containsMatchIn(uri.path.orEmpty())) {
+                    view.postDelayed({ view.evaluateJavascript(Marketplace.SNAP_JS, null) }, 600)
+                }
+                return
+            }
             // In-page address changes are usually overlays (search, photo viewer) that push "/"
             // without loading anything. Real feed/home loads come through onPageStarted and are
             // bounced there. So: give it a beat, then bounce only if the feed is actually on screen.
@@ -322,8 +328,12 @@ class MainActivity : ComponentActivity() {
             }
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
             val uri = Uri.parse(url)
+            if (uri.path.orEmpty().startsWith("/photo") || uri.path.orEmpty().startsWith("/media")) {
+                view.evaluateJavascript(Marketplace.SNAP_JS, null)
+            }
             if (uri.path.orEmpty().startsWith("/marketplace")) {
                 view.evaluateJavascript(Marketplace.HIDE_CHROME_JS, null)
+                view.evaluateJavascript(Marketplace.SNAP_JS, null)
             } else if (Marketplace.isFacebookHost(uri)) {
                 // Login / checkpoint / captcha pages: Facebook's mobile versions arrive in
                 // fixed-height blocks sized by a script that crashes in a WebView, leaving the

@@ -121,6 +121,70 @@ object Marketplace {
         })()
     """.trimIndent()
 
+    /**
+     * Listing photo strips: Facebook shows them as one free-scrolling horizontal strip. Make
+     * each photo exactly one strip-width wide and snap one photo per swipe. Only touches
+     * horizontal scrollers that hold 2+ images and almost no text (so the "Inbox / Sell /
+     * Categories" chip row is left alone). Reports what it did in window.__omSnap.
+     */
+    val SNAP_JS = """
+        (function () {
+          var info = window.__omSnap = window.__omSnap || { found: 0, done: 0, skipped: [] };
+          function fix(sc) {
+            if (sc.getAttribute('data-om-snap')) return;
+            var w = sc.clientWidth; if (w < 200) return;
+            // Slides: descend through single-child wrappers to the level with several children.
+            var track = sc;
+            while (track.children.length === 1) track = track.children[0];
+            var slides = Array.prototype.filter.call(track.children, function (k) { return k.querySelector('img') || k.tagName === 'IMG' || getComputedStyle(k).backgroundImage !== 'none'; });
+            if (slides.length < 2) { info.skipped.push('slides=' + slides.length); return; }
+            sc.setAttribute('data-om-snap', '1');
+            sc.style.setProperty('scroll-snap-type', 'x mandatory', 'important');
+            sc.style.setProperty('overscroll-behavior-x', 'contain', 'important');
+            track.style.setProperty('gap', '0', 'important');
+            slides.forEach(function (s) {
+              s.style.setProperty('flex', '0 0 ' + w + 'px', 'important');
+              s.style.setProperty('width', w + 'px', 'important');
+              s.style.setProperty('max-width', w + 'px', 'important');
+              s.style.setProperty('margin-left', '0', 'important');
+              s.style.setProperty('margin-right', '0', 'important');
+              s.style.setProperty('scroll-snap-align', 'center', 'important');
+              s.style.setProperty('scroll-snap-stop', 'always', 'important');
+              Array.prototype.forEach.call(s.querySelectorAll('img'), function (im) {
+                im.style.setProperty('width', '100%', 'important');
+                im.style.setProperty('object-fit', 'contain', 'important');
+              });
+            });
+            info.done++;
+          }
+          function scan(root) {
+            // Only listing and photo pages; never the main feed (keeps scrolling cost at zero).
+            // ("/" too: the full-screen photo viewer is an overlay that sets the address to "/".)
+            if (!/\/marketplace\/item|\/photo|\/media|^\/$/.test(location.pathname)) return;
+            var els = (root || document).querySelectorAll('div, ul');
+            for (var i = 0; i < els.length; i++) {
+              var el = els[i];
+              if (el.scrollWidth <= el.clientWidth + 20) continue;
+              var s = getComputedStyle(el);
+              if (s.overflowX !== 'auto' && s.overflowX !== 'scroll') continue;
+              if (el.querySelectorAll('img').length < 2 && !/url\(/.test(el.innerHTML.slice(0, 20000))) continue;
+              if ((el.innerText || '').replace(/\s+/g, '').length > 30) continue; // chip rows, text carousels
+              info.found++;
+              fix(el);
+            }
+          }
+          scan(document);
+          if (!window.__omSnapObs) {
+            var timer = 0;
+            window.__omSnapObs = new MutationObserver(function () {
+              if (timer) return;
+              timer = setTimeout(function () { timer = 0; scan(document); }, 400);
+            });
+            window.__omSnapObs.observe(document.documentElement, { childList: true, subtree: true });
+          }
+        })();
+    """.trimIndent()
+
     /** Shows the bottom event log. Off for normal use. */
     const val DEBUG_TOASTS = false
 
@@ -246,14 +310,21 @@ object Marketplace {
                 // icon row's height off the container so nothing below is pushed down.
                 tl.style.setProperty('height', Math.round(tr.height - rowH) + 'px', 'important');
                 // The header's back arrow (first button in the row) leads out of Marketplace.
-                // Blank it but keep its space: the title overlaps the row with a negative margin.
+                // Blank it but keep its space (the title overlaps the row with a negative margin),
+                // then slide the title left over the empty slot. Transform doesn't touch layout.
                 Array.prototype.forEach.call(tl.children, function (row) {
                   if (row.getAttribute('role') === 'tab') return;
                   var back = row.querySelector('[role="button"]');
-                  if (back && back.getBoundingClientRect().left < 60) {
-                    back.style.setProperty('visibility', 'hidden', 'important');
-                    back.style.setProperty('pointer-events', 'none', 'important');
-                  }
+                  if (!back || back.getBoundingClientRect().left >= 60) return;
+                  back.style.setProperty('visibility', 'hidden', 'important');
+                  back.style.setProperty('pointer-events', 'none', 'important');
+                  var h1 = row.querySelector('h1');
+                  if (!h1) return;
+                  // The title's own column: the child of the row that contains the H1.
+                  var col = h1;
+                  while (col.parentElement && col.parentElement !== row) col = col.parentElement;
+                  var shift = Math.round(h1.getBoundingClientRect().left - back.getBoundingClientRect().left);
+                  if (shift > 0 && shift < 100) col.style.setProperty('transform', 'translateX(-' + shift + 'px)', 'important');
                 });
               } else {
                 hide(tl); // nothing but tabs in it

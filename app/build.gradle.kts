@@ -11,8 +11,8 @@ android {
         applicationId = "com.alex.onlymarketplace"
         minSdk = 28
         targetSdk = 35
-        versionCode = 62
-        versionName = "0.6.1"
+        versionCode = 63
+        versionName = "0.6.2"
     }
 
     buildFeatures {
