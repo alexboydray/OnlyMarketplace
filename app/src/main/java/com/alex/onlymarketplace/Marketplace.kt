@@ -129,59 +129,43 @@ object Marketplace {
      */
     val SNAP_JS = """
         (function () {
-          var info = window.__omSnap = window.__omSnap || { found: 0, done: 0, skipped: [] };
-          function fix(sc) {
-            if (sc.getAttribute('data-om-snap')) return;
-            var w = sc.clientWidth; if (w < 200) return;
-            // Slides: descend through single-child wrappers to the level with several children.
-            var track = sc;
-            while (track.children.length === 1) track = track.children[0];
-            var slides = Array.prototype.filter.call(track.children, function (k) { return k.querySelector('img') || k.tagName === 'IMG' || getComputedStyle(k).backgroundImage !== 'none'; });
-            if (slides.length < 2) { info.skipped.push('slides=' + slides.length); return; }
-            sc.setAttribute('data-om-snap', '1');
-            sc.style.setProperty('scroll-snap-type', 'x mandatory', 'important');
-            sc.style.setProperty('overscroll-behavior-x', 'contain', 'important');
-            track.style.setProperty('gap', '0', 'important');
-            slides.forEach(function (s) {
-              s.style.setProperty('flex', '0 0 ' + w + 'px', 'important');
-              s.style.setProperty('width', w + 'px', 'important');
-              s.style.setProperty('max-width', w + 'px', 'important');
-              s.style.setProperty('margin-left', '0', 'important');
-              s.style.setProperty('margin-right', '0', 'important');
-              s.style.setProperty('scroll-snap-align', 'center', 'important');
-              s.style.setProperty('scroll-snap-stop', 'always', 'important');
-              Array.prototype.forEach.call(s.querySelectorAll('img'), function (im) {
-                im.style.setProperty('width', '100%', 'important');
-                im.style.setProperty('object-fit', 'contain', 'important');
-              });
-            });
-            info.done++;
+          // INSPECT ONLY — changes nothing. Describes the photo viewer so the one-photo-per-swipe
+          // fix can be built from its real structure. Read out via the ⏱ report.
+          function R(e) { var r = e.getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); }
+          function tag(e) {
+            var c = (typeof e.className === 'string' && e.className) ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+            return e.tagName + (e.id ? '#' + e.id : '') + c + (e.getAttribute('role') ? '[' + e.getAttribute('role') + ']' : '') + (e.getAttribute('data-sigil') ? '{' + e.getAttribute('data-sigil').slice(0, 30) + '}' : '');
           }
-          function scan(root) {
-            // Only listing and photo pages; never the main feed (keeps scrolling cost at zero).
-            // ("/" too: the full-screen photo viewer is an overlay that sets the address to "/".)
-            if (!/\/marketplace\/item|\/photo|\/media|^\/$/.test(location.pathname)) return;
-            var els = (root || document).querySelectorAll('div, ul');
-            for (var i = 0; i < els.length; i++) {
-              var el = els[i];
-              if (el.scrollWidth <= el.clientWidth + 20) continue;
-              var s = getComputedStyle(el);
-              if (s.overflowX !== 'auto' && s.overflowX !== 'scroll') continue;
-              if (el.querySelectorAll('img').length < 2 && !/url\(/.test(el.innerHTML.slice(0, 20000))) continue;
-              if ((el.innerText || '').replace(/\s+/g, '').length > 30) continue; // chip rows, text carousels
-              info.found++;
-              fix(el);
+          function sty(e) {
+            var s = getComputedStyle(e);
+            return 'd=' + s.display + ' pos=' + s.position + ' ovx=' + s.overflowX + ' ovy=' + s.overflowY + (s.transform !== 'none' ? ' tf=' + s.transform : '') +
+              (s.touchAction !== 'auto' ? ' ta=' + s.touchAction : '') + (s.scrollSnapType !== 'none' ? ' snap=' + s.scrollSnapType : '') +
+              (s.backgroundImage !== 'none' ? ' bgimg' : '') + ' sw=' + e.scrollWidth + ' sl=' + Math.round(e.scrollLeft);
+          }
+          var out = ['path=' + location.pathname + ' vw=' + innerWidth + 'x' + innerHeight];
+          var imgs = Array.prototype.filter.call(document.querySelectorAll('img'), function (im) {
+            var r = im.getBoundingClientRect(); return r.width > innerWidth * 0.4 && r.height > 100;
+          });
+          out.push('big images: ' + imgs.length);
+          imgs.slice(0, 6).forEach(function (im, k) { out.push(' IMG' + k + ' ' + R(im) + ' nat=' + im.naturalWidth + 'x' + im.naturalHeight + ' src=' + (im.currentSrc || im.src).split('?')[0].slice(-30)); });
+          if (imgs[0]) {
+            out.push('chain from IMG0 up:');
+            var e = imgs[0], n = 0;
+            while (e && e !== document.body && n < 14) {
+              out.push(' ' + tag(e) + ' ' + R(e) + ' kids=' + e.children.length + ' ' + sty(e));
+              e = e.parentElement; n++;
+            }
+            // Siblings at the level where the images diverge (the track).
+            if (imgs[1]) {
+              var a = imgs[0], common = null;
+              for (var x = a; x; x = x.parentElement) if (x.contains(imgs[1])) { common = x; break; }
+              if (common) {
+                out.push('common parent of IMG0/IMG1: ' + tag(common) + ' ' + R(common) + ' ' + sty(common));
+                Array.prototype.slice.call(common.children, 0, 8).forEach(function (k, i) { out.push('  child' + i + ' ' + tag(k) + ' ' + R(k) + ' ' + sty(k)); });
+              }
             }
           }
-          scan(document);
-          if (!window.__omSnapObs) {
-            var timer = 0;
-            window.__omSnapObs = new MutationObserver(function () {
-              if (timer) return;
-              timer = setTimeout(function () { timer = 0; scan(document); }, 400);
-            });
-            window.__omSnapObs.observe(document.documentElement, { childList: true, subtree: true });
-          }
+          window.__omSnap = { found: imgs.length, done: 0, skipped: [], dump: out.join('\n') };
         })();
     """.trimIndent()
 
@@ -323,8 +307,14 @@ object Marketplace {
                   // The title's own column: the child of the row that contains the H1.
                   var col = h1;
                   while (col.parentElement && col.parentElement !== row) col = col.parentElement;
-                  var shift = Math.round(h1.getBoundingClientRect().left - back.getBoundingClientRect().left);
+                  // Line the title up with the page's normal left margin (where the chip row
+                  // starts, ~14px), then enlarge it 20%. Both are transforms, so the header's
+                  // layout doesn't move.
+                  var target = 14;
+                  var shift = Math.round(h1.getBoundingClientRect().left - target);
                   if (shift > 0 && shift < 100) col.style.setProperty('transform', 'translateX(-' + shift + 'px)', 'important');
+                  h1.style.setProperty('transform-origin', 'left center', 'important');
+                  h1.style.setProperty('transform', 'scale(1.2)', 'important');
                 });
               } else {
                 hide(tl); // nothing but tabs in it
