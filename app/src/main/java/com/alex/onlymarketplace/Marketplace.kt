@@ -207,15 +207,42 @@ object Marketplace {
             (document.head || document.documentElement).appendChild(st);
           }
           function isDark(c) { var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c); return !!m && +m[1] < 30 && +m[2] < 30 && +m[3] < 30 && (m[4] === undefined || +m[4] > 0.5); }
-          function viewerOpen() {
+          // Returns the viewer's black backdrop element, or null if no viewer is open.
+          function viewerBackdrop() {
             var strips = document.querySelectorAll('[data-om-snap]');
             for (var i = 0; i < strips.length; i++) {
               if (!strips[i].isConnected || strips[i].getBoundingClientRect().height < innerHeight * 0.4) continue;
-              for (var e = strips[i], n = 0; e && n < 6; e = e.parentElement, n++) if (isDark(getComputedStyle(e).backgroundColor)) return true;
+              for (var e = strips[i], n = 0; e && n < 6; e = e.parentElement, n++) if (isDark(getComputedStyle(e).backgroundColor)) return e;
             }
-            return false;
+            return null;
           }
-          function syncDark() { document.documentElement.classList.toggle('om-viewer', viewerOpen()); }
+          function isLight(c) { var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c); return !!m && +m[1] > 200 && +m[2] > 200 && +m[3] > 200 && (m[4] === undefined || +m[4] > 0.3); }
+          var darkened = window.__omDarkened = window.__omDarkened || [];
+          function syncDark() {
+            var bd = viewerBackdrop();
+            document.documentElement.classList.toggle('om-viewer', !!bd);
+            if (!bd) {
+              // Viewer closed: give back every colour we changed.
+              while (darkened.length) { var d = darkened.pop(); d.el.style.removeProperty('background-color'); if (d.prev) d.el.style.setProperty('background-color', d.prev); }
+              return;
+            }
+            // Whatever is painted in the band between the black backdrop and the bottom of the
+            // screen: anything light there goes black. Sampled at a few points across and down.
+            var top = bd.getBoundingClientRect().bottom;
+            for (var y = top + 4; y < innerHeight; y += 12) {
+              [0.1, 0.5, 0.9].forEach(function (fx) {
+                var stack = document.elementsFromPoint(innerWidth * fx, y);
+                for (var k = 0; k < stack.length; k++) {
+                  var el = stack[k];
+                  if (el === document.documentElement || el === document.body) continue;
+                  if (!isLight(getComputedStyle(el).backgroundColor)) continue;
+                  if (darkened.some(function (d) { return d.el === el; })) continue;
+                  darkened.push({ el: el, prev: el.style.getPropertyValue('background-color') });
+                  el.style.setProperty('background-color', '#000', 'important');
+                }
+              });
+            }
+          }
           snapAll();
           syncDark();
           if (!window.__omSnapObs) {
