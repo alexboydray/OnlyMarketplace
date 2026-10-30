@@ -385,10 +385,11 @@ object Marketplace {
                   // The title's own column: the child of the row that contains the H1.
                   var col = h1;
                   while (col.parentElement && col.parentElement !== row) col = col.parentElement;
-                  // Line the title up with the page's normal left margin (where the chip row
-                  // starts, ~14px), then enlarge it 20%. Both are transforms, so the header's
-                  // layout doesn't move.
-                  var target = 14;
+                  // Place the title so the gap left of the "M" matches the gap above it (blue bar
+                  // to the top of the letter, ~10px; the letter itself sits ~2.5px inside its
+                  // box), then enlarge it 20%. Both are transforms, so the header's layout
+                  // doesn't move.
+                  var target = 7;
                   var shift = Math.round(h1.getBoundingClientRect().left - target);
                   if (shift > 0 && shift < 100) col.style.setProperty('transform', 'translateX(-' + shift + 'px)', 'important');
                   h1.style.setProperty('transform-origin', 'left center', 'important');
