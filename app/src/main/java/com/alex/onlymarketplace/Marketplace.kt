@@ -328,6 +328,23 @@ object Marketplace {
         })();
     """.trimIndent()
 
+    /**
+     * Makes the page draw fresh frames. A new WebView background colour only shows up on the
+     * next frame the page draws; when the photos come from cache nothing on the page changes,
+     * so no frame comes until you touch the screen. A near-invisible opacity flicker on the
+     * whole page over a few frames forces them.
+     */
+    val REPAINT_JS = """
+        (function () {
+          var h = document.documentElement, n = 0;
+          function step() {
+            h.style.setProperty('opacity', (n % 2) ? '1' : '0.999');
+            if (++n < 6) requestAnimationFrame(step); else h.style.removeProperty('opacity');
+          }
+          requestAnimationFrame(step);
+        })();
+    """.trimIndent()
+
     /** One-off diagnostic for the white band under the photo viewer. */
     val BAND_JS = """
         (function () {
