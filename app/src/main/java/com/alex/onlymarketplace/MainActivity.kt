@@ -190,6 +190,7 @@ class MainActivity : ComponentActivity() {
                 if (dark != viewerDark) {
                     viewerDark = dark
                     webView.setBackgroundColor(if (dark) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                    webView.invalidate() // redraw now, not on the next touch
                     // Viewer open: allow pinch zoom up to 5x. Closed: back to 1x and locked, so
                     // the listings never end up zoomed.
                     webView.evaluateJavascript(Marketplace.zoomJs(dark), null)
@@ -197,7 +198,9 @@ class MainActivity : ComponentActivity() {
                 }
                 // While open, keep blacking out any white layer left under the viewer (it can
                 // appear a moment after the viewer does).
-                if (dark) webView.evaluateJavascript(Marketplace.viewerDarkJs(true), null)
+                if (dark) webView.evaluateJavascript(Marketplace.viewerDarkJs(true)) { n ->
+                    if (n != "0" && n != "null") webView.invalidate()
+                }
             }
             webView.postDelayed(this, 500)
         }

@@ -299,7 +299,7 @@ object Marketplace {
           }
           var strip = null;
           [].some.call(document.querySelectorAll('.hscroller'), function (s) { if (s.getBoundingClientRect().height > 150) { strip = s; return true; } });
-          var viewer = strip; // leave the photos themselves alone
+          var viewer = strip, changed = 0; // leave the photos themselves alone
           var y1 = innerHeight * 0.5, y2 = innerHeight - 70, x = innerWidth / 2;
           var all = document.body ? document.body.getElementsByTagName('*') : [];
           for (var k = 0; k < all.length; k++) {
@@ -313,7 +313,18 @@ object Marketplace {
             if (done.some(function (d) { return d.el === el; })) continue;
             done.push({ el: el, prev: el.style.getPropertyValue('background-color') });
             el.style.setProperty('background-color', '#000', 'important');
+            changed++;
           }
+          // The hidden layer isn't repainted until something on screen moves (it changed only
+          // when touched). Nudge the page by a pixel and back so it redraws right away.
+          if (changed) {
+            var se = document.scrollingElement || document.documentElement;
+            se.scrollTop += 1; se.scrollTop -= 1;
+            var h = document.documentElement;
+            h.style.setProperty('transform', 'translateZ(0)');
+            requestAnimationFrame(function () { requestAnimationFrame(function () { h.style.removeProperty('transform'); }); });
+          }
+          return changed;
         })();
     """.trimIndent()
 
