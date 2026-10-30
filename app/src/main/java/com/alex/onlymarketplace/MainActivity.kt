@@ -70,19 +70,6 @@ class MainActivity : ComponentActivity() {
         WebSettingsCompat.setUserAgentMetadata(webView.settings, meta)
     }
 
-    /** Temporary: copy the scroll-performance report to the clipboard. */
-    private fun copyPerfReport() {
-        webView.evaluateJavascript("(function(){var p=" + Marketplace.PERF_JS + ";" + Marketplace.SNAP_JS + "var s=window.__omSnap;" +
-            "return p+'\\n--- PHOTO VIEWER (strips snapped: '+(s?s.done:0)+', already marked: '+document.querySelectorAll('[data-om-snap]').length+')\\n'+(s&&s.dump?s.dump:'none');})()") { raw ->
-            val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
-            val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} perf\nURL ${webView.url}\n$body\nJS ERRORS: ${jsErrors.joinToString(" | ")}" +
-                "\nRECENT NAVIGATION (oldest first):\n" + navLog.joinToString("\n") { "  $it" }
-            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace perf", text))
-            Toast.makeText(this, "Speed report copied — paste it into the chat", Toast.LENGTH_LONG).show()
-        }
-    }
-
     /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
     private fun note(msg: String) {
         if (!Marketplace.DEBUG_TOASTS) return
@@ -108,7 +95,7 @@ class MainActivity : ComponentActivity() {
         webView = WebView(this)
         refresh = SwipeRefreshLayout(this).apply {
             addView(webView)
-            setColorSchemeColors(0xFF1877F2.toInt())
+            setColorSchemeColors(0xFF0866FF.toInt())
             setDistanceToTriggerSync(300) // needs a deliberate pull, not a flick
             setOnRefreshListener { webView.reload() }
         }
@@ -120,20 +107,9 @@ class MainActivity : ComponentActivity() {
             visibility = if (Marketplace.DEBUG_TOASTS) View.VISIBLE else View.GONE
             setOnClickListener { logLines.clear(); text = "" }
         }
-        // Temporary speed-report button (bottom-right). Removed once scrolling is sorted.
-        val perfButton = TextView(this).apply {
-            text = "⏱"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setBackgroundColor(0x551877F2)
-            setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener { copyPerfReport() }
-        }
-        val px = (44 * resources.displayMetrics.density).toInt()
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(debugLog, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
-            addView(perfButton, FrameLayout.LayoutParams(px, px, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, px / 3, px / 3) })
         }
         setContentView(root)
 

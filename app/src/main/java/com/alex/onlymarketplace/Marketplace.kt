@@ -197,7 +197,27 @@ object Marketplace {
               if (ox === 'auto' || ox === 'scroll') snap(el);
             }
           }
+          // Full-screen photo viewer: its black area stops short of the bottom bar and the page's
+          // white background shows through. While a snapped strip sits on a black backdrop,
+          // make the page background black too; restore it when the viewer closes.
+          if (!document.getElementById('om-dark')) {
+            var st = document.createElement('style');
+            st.id = 'om-dark';
+            st.textContent = 'html.om-viewer, html.om-viewer body, html.om-viewer #screen-root { background: #000 !important; }';
+            (document.head || document.documentElement).appendChild(st);
+          }
+          function isDark(c) { var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c); return !!m && +m[1] < 30 && +m[2] < 30 && +m[3] < 30 && (m[4] === undefined || +m[4] > 0.5); }
+          function viewerOpen() {
+            var strips = document.querySelectorAll('[data-om-snap]');
+            for (var i = 0; i < strips.length; i++) {
+              if (!strips[i].isConnected || strips[i].getBoundingClientRect().height < innerHeight * 0.4) continue;
+              for (var e = strips[i], n = 0; e && n < 6; e = e.parentElement, n++) if (isDark(getComputedStyle(e).backgroundColor)) return true;
+            }
+            return false;
+          }
+          function syncDark() { document.documentElement.classList.toggle('om-viewer', viewerOpen()); }
           snapAll();
+          syncDark();
           if (!window.__omSnapObs) {
             var timer = 0;
             window.__omSnapObs = new MutationObserver(function () {
@@ -206,6 +226,7 @@ object Marketplace {
                 timer = 0;
                 // Listing and photo pages only (the viewer overlay sets the address to "/").
                 if (/\/marketplace\/item|\/photo|\/media|^\/$/.test(location.pathname)) snapAll();
+                syncDark();
               }, 400);
             });
             window.__omSnapObs.observe(document.documentElement, { childList: true, subtree: true });
