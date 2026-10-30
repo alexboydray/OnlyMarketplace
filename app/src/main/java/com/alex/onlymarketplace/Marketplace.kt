@@ -385,15 +385,24 @@ object Marketplace {
                   // The title's own column: the child of the row that contains the H1.
                   var col = h1;
                   while (col.parentElement && col.parentElement !== row) col = col.parentElement;
-                  // Place the title so the gap left of the "M" matches the gap above it (blue bar
-                  // to the top of the letter, ~10px; the letter itself sits ~2.5px inside its
-                  // box), then enlarge it 20%. Both are transforms, so the header's layout
-                  // doesn't move.
-                  var target = 7;
+                  // Place the title so the gap left of the "M" matches the gap above it (at this
+                  // size ~7.5px from the blue bar to the top of the letter; the letter sits ~3px
+                  // inside its box), then enlarge it 44% (1.2 x 1.2). Both are transforms, so
+                  // the header's layout doesn't move.
+                  var target = 5;
                   var shift = Math.round(h1.getBoundingClientRect().left - target);
                   if (shift > 0 && shift < 100) col.style.setProperty('transform', 'translateX(-' + shift + 'px)', 'important');
                   h1.style.setProperty('transform-origin', 'left center', 'important');
-                  h1.style.setProperty('transform', 'scale(1.2)', 'important');
+                  h1.style.setProperty('transform', 'scale(1.44)', 'important');
+                  // Tapping the title reloads the Marketplace home page.
+                  if (!h1.getAttribute('data-om-home')) {
+                    h1.setAttribute('data-om-home', '1');
+                    h1.style.setProperty('cursor', 'pointer', 'important');
+                    h1.addEventListener('click', function (e) {
+                      e.preventDefault(); e.stopPropagation();
+                      location.assign('https://m.facebook.com/marketplace/');
+                    }, true);
+                  }
                 });
               } else {
                 hide(tl); // nothing but tabs in it
