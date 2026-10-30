@@ -261,6 +261,31 @@ object Marketplace {
         })();
     """.trimIndent()
 
+    /** One-off diagnostic for the white band under the photo viewer. */
+    val BAND_JS = """
+        (function () {
+          function tag(e) { var c = (typeof e.className === 'string' && e.className) ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : ''; return e.tagName + (e.id ? '#' + e.id : '') + c; }
+          function R(e) { var r = e.getBoundingClientRect(); return Math.round(r.top) + '-' + Math.round(r.bottom) + ' w' + Math.round(r.width); }
+          var out = ['vw=' + innerWidth + 'x' + innerHeight + ' path=' + location.pathname,
+                     'html class="' + document.documentElement.className + '" html bg=' + getComputedStyle(document.documentElement).backgroundColor + ' body bg=' + getComputedStyle(document.body).backgroundColor,
+                     'snapped strips: ' + document.querySelectorAll('[data-om-snap]').length + ' darkened: ' + ((window.__omDarkened || []).length)];
+          var strip = document.querySelector('[data-om-snap]') || document.querySelector('.hscroller');
+          if (strip) {
+            out.push('strip ' + tag(strip) + ' ' + R(strip) + ' snapped=' + !!strip.getAttribute('data-om-snap'));
+            for (var e = strip, n = 0; e && n < 10; e = e.parentElement, n++) {
+              var s = getComputedStyle(e);
+              out.push(' up' + n + ' ' + tag(e) + ' ' + R(e) + ' bg=' + s.backgroundColor + (s.backgroundImage !== 'none' ? ' bgimg' : '') + ' pos=' + s.position);
+            }
+          } else out.push('no strip found');
+          [innerHeight - 70, innerHeight - 55, innerHeight - 40].forEach(function (y) {
+            out.push('stack @y=' + y + ': ' + document.elementsFromPoint(innerWidth / 2, y).slice(0, 8).map(function (el) {
+              var s = getComputedStyle(el); return tag(el) + '[' + R(el) + ' bg=' + s.backgroundColor + ' pos=' + s.position + ']';
+            }).join(' > '));
+          });
+          return out.join('\n');
+        })()
+    """.trimIndent()
+
     /** Shows the bottom event log. Off for normal use. */
     const val DEBUG_TOASTS = false
 

@@ -107,9 +107,25 @@ class MainActivity : ComponentActivity() {
             visibility = if (Marketplace.DEBUG_TOASTS) View.VISIBLE else View.GONE
             setOnClickListener { logLines.clear(); text = "" }
         }
+        // Temporary (one round): copies the photo-viewer band diagnostic. Top-right, clear of the
+        // viewer's bottom bar.
+        val diagButton = TextView(this).apply {
+            text = "⏱"; textSize = 18f; gravity = Gravity.CENTER
+            setBackgroundColor(0x550866FF); setTextColor(0xFFFFFFFF.toInt())
+            setOnClickListener {
+                webView.evaluateJavascript(Marketplace.BAND_JS) { raw ->
+                    val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
+                    val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace", "OnlyMarketplace ${BuildConfig.VERSION_NAME} band\n$body"))
+                    Toast.makeText(this@MainActivity, "Report copied — paste it into the chat", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        val px = (44 * resources.displayMetrics.density).toInt()
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(debugLog, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
+            addView(diagButton, FrameLayout.LayoutParams(px, px, Gravity.CENTER_VERTICAL or Gravity.END))
         }
         setContentView(root)
 
