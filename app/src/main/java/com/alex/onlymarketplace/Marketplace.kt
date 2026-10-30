@@ -227,8 +227,19 @@ object Marketplace {
           if (${on}) {
             m.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes';
             if (!st) { st = document.createElement('style'); st.id = 'om-zoom'; (document.head || document.documentElement).appendChild(st); }
-            st.textContent = '.hscroller, .hscroller * { touch-action: pan-x pan-y pinch-zoom !important; }';
+            // Not zoomed: sideways swipes and pinches only, so a slightly diagonal swipe still
+            // changes photo instead of becoming an up/down drag. Zoomed in: drag any direction
+            // to look around the photo.
+            window.__omZoomOn = true;
+            var upd = window.__omZoomUpd = window.__omZoomUpd || function () {
+              var s = document.getElementById('om-zoom'); if (!s || !window.__omZoomOn) return;
+              var zoomed = window.visualViewport && visualViewport.scale > 1.02;
+              s.textContent = '.hscroller, .hscroller * { touch-action: ' + (zoomed ? 'pan-x pan-y pinch-zoom' : 'pan-x pinch-zoom') + ' !important; }';
+            };
+            if (window.visualViewport && !window.__omZoomListen) { window.__omZoomListen = true; visualViewport.addEventListener('resize', upd); }
+            upd();
           } else {
+            window.__omZoomOn = false;
             m.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
             setTimeout(function () { m.content = m.getAttribute('data-om-orig'); }, 300);
             if (st) st.textContent = '';
