@@ -190,6 +190,9 @@ class MainActivity : ComponentActivity() {
                     // Viewer open: allow pinch zoom up to 5x. Closed: back to 1x and locked, so
                     // the listings never end up zoomed.
                     webView.evaluateJavascript(Marketplace.zoomJs(open), null)
+                    // Pull-to-refresh was catching part of sideways photo swipes. Off while
+                    // the viewer is open.
+                    refresh.isEnabled = !open
                 }
             }
             webView.postDelayed(this, 500)
