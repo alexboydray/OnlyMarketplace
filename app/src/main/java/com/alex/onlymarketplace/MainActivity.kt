@@ -175,34 +175,21 @@ class MainActivity : ComponentActivity() {
         webView.saveState(outState)
     }
 
-    // The full-screen photo viewer is shorter than the screen, and below the page the WebView's
-    // own white background shows. So: twice a second, if the photo viewer is open (address "/"
-    // with a big photo in a .hscroller — single photos included), make that background black;
-    // otherwise white. Polling rather than navigation events, because reopening the same
-    // photos doesn't reliably produce one.
-    private var viewerDark = false
+    // Pinch zoom in the photo viewer only. Twice a second: is the viewer open (address "/" with a
+    // big photo in a .hscroller, single photos included)? Polling rather than navigation events,
+    // because reopening the same photos doesn't reliably produce one.
+    private var viewerOpen = false
     private val viewerCheck = object : Runnable {
         override fun run() {
             webView.evaluateJavascript(
                 "(location.pathname==='/'&&[].some.call(document.querySelectorAll('.hscroller img'),function(i){return i.getBoundingClientRect().height>150}))"
             ) { r ->
-                val dark = r == "true"
-                if (dark != viewerDark) {
-                    viewerDark = dark
-                    webView.setBackgroundColor(if (dark) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-                    // Make the page draw new frames so the colour shows now, not on the next touch.
-                    webView.evaluateJavascript(Marketplace.REPAINT_JS, null)
-                    webView.postDelayed({ webView.evaluateJavascript(Marketplace.REPAINT_JS, null) }, 150)
-                    webView.postDelayed({ webView.evaluateJavascript(Marketplace.REPAINT_JS, null) }, 500)
+                val open = r == "true"
+                if (open != viewerOpen) {
+                    viewerOpen = open
                     // Viewer open: allow pinch zoom up to 5x. Closed: back to 1x and locked, so
                     // the listings never end up zoomed.
-                    webView.evaluateJavascript(Marketplace.zoomJs(dark), null)
-                    if (!dark) webView.evaluateJavascript(Marketplace.viewerDarkJs(false), null)
-                }
-                // While open, keep blacking out any white layer left under the viewer (it can
-                // appear a moment after the viewer does).
-                if (dark) webView.evaluateJavascript(Marketplace.viewerDarkJs(true)) { n ->
-                    if (n != "0" && n != "null") webView.evaluateJavascript(Marketplace.REPAINT_JS, null)
+                    webView.evaluateJavascript(Marketplace.zoomJs(open), null)
                 }
             }
             webView.postDelayed(this, 500)

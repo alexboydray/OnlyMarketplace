@@ -197,54 +197,7 @@ object Marketplace {
               if (ox === 'auto' || ox === 'scroll') snap(el);
             }
           }
-          // Full-screen photo viewer: its black area stops short of the bottom bar and the page's
-          // white background shows through. While a snapped strip sits on a black backdrop,
-          // make the page background black too; restore it when the viewer closes.
-          if (!document.getElementById('om-dark')) {
-            var st = document.createElement('style');
-            st.id = 'om-dark';
-            st.textContent = 'html.om-viewer, html.om-viewer body, html.om-viewer #screen-root { background: #000 !important; }';
-            (document.head || document.documentElement).appendChild(st);
-          }
-          function isDark(c) { var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c); return !!m && +m[1] < 30 && +m[2] < 30 && +m[3] < 30 && (m[4] === undefined || +m[4] > 0.5); }
-          // Returns the viewer's black backdrop element, or null if no viewer is open.
-          function viewerBackdrop() {
-            var strips = document.querySelectorAll('[data-om-snap]');
-            for (var i = 0; i < strips.length; i++) {
-              if (!strips[i].isConnected || strips[i].getBoundingClientRect().height < innerHeight * 0.4) continue;
-              for (var e = strips[i], n = 0; e && n < 6; e = e.parentElement, n++) if (isDark(getComputedStyle(e).backgroundColor)) return e;
-            }
-            return null;
-          }
-          function isLight(c) { var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c); return !!m && +m[1] > 200 && +m[2] > 200 && +m[3] > 200 && (m[4] === undefined || +m[4] > 0.3); }
-          var darkened = window.__omDarkened = window.__omDarkened || [];
-          function syncDark() {
-            var bd = viewerBackdrop();
-            document.documentElement.classList.toggle('om-viewer', !!bd);
-            if (!bd) {
-              // Viewer closed: give back every colour we changed.
-              while (darkened.length) { var d = darkened.pop(); d.el.style.removeProperty('background-color'); if (d.prev) d.el.style.setProperty('background-color', d.prev); }
-              return;
-            }
-            // Whatever is painted in the band between the black backdrop and the bottom of the
-            // screen: anything light there goes black. Sampled at a few points across and down.
-            var top = bd.getBoundingClientRect().bottom;
-            for (var y = top + 4; y < innerHeight; y += 12) {
-              [0.1, 0.5, 0.9].forEach(function (fx) {
-                var stack = document.elementsFromPoint(innerWidth * fx, y);
-                for (var k = 0; k < stack.length; k++) {
-                  var el = stack[k];
-                  if (el === document.documentElement || el === document.body) continue;
-                  if (!isLight(getComputedStyle(el).backgroundColor)) continue;
-                  if (darkened.some(function (d) { return d.el === el; })) continue;
-                  darkened.push({ el: el, prev: el.style.getPropertyValue('background-color') });
-                  el.style.setProperty('background-color', '#000', 'important');
-                }
-              });
-            }
-          }
           snapAll();
-          syncDark();
           if (!window.__omSnapObs) {
             var timer = 0;
             window.__omSnapObs = new MutationObserver(function () {
@@ -253,7 +206,6 @@ object Marketplace {
                 timer = 0;
                 // Listing and photo pages only (the viewer overlay sets the address to "/").
                 if (/\/marketplace\/item|\/photo|\/media|^\/$/.test(location.pathname)) snapAll();
-                syncDark();
               }, 400);
             });
             window.__omSnapObs.observe(document.documentElement, { childList: true, subtree: true });
@@ -282,105 +234,6 @@ object Marketplace {
             if (st) st.textContent = '';
           }
         })();
-    """.trimIndent()
-
-    /**
-     * Second opening of the same photos: Facebook keeps the (white) listing screen in the page
-     * under the viewer, with pointer-events off, so it shows in the gap below the photo. While the
-     * viewer is open, find anything light painted in that gap — including untouchable layers —
-     * and make it black. When the viewer closes, put every colour back.
-     */
-    fun viewerDarkJs(on: Boolean) = """
-        (function () {
-          var done = window.__omBlack = window.__omBlack || [];
-          if (!${on}) {
-            while (done.length) { var d = done.pop(); d.el.style.removeProperty('background-color'); if (d.prev) d.el.style.setProperty('background-color', d.prev); }
-            return;
-          }
-          var strip = null;
-          [].some.call(document.querySelectorAll('.hscroller'), function (s) { if (s.getBoundingClientRect().height > 150) { strip = s; return true; } });
-          var viewer = strip, changed = 0; // leave the photos themselves alone
-          var y1 = innerHeight * 0.5, y2 = innerHeight - 70, x = innerWidth / 2;
-          var all = document.body ? document.body.getElementsByTagName('*') : [];
-          for (var k = 0; k < all.length; k++) {
-            var el = all[k];
-            if (viewer && viewer.contains(el)) continue;
-            var r = el.getBoundingClientRect();
-            if (r.width < innerWidth * 0.8 || r.bottom < y2 || r.top > y1 || r.left > x || r.right < x) continue;
-            var c = getComputedStyle(el).backgroundColor;
-            var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c);
-            if (!m || +m[1] < 200 || +m[2] < 200 || +m[3] < 200 || (m[4] !== undefined && +m[4] < 0.3)) continue;
-            if (done.some(function (d) { return d.el === el; })) continue;
-            done.push({ el: el, prev: el.style.getPropertyValue('background-color') });
-            el.style.setProperty('background-color', '#000', 'important');
-            changed++;
-          }
-          // The hidden layer isn't repainted until something on screen moves (it changed only
-          // when touched). Nudge the page by a pixel and back so it redraws right away.
-          if (changed) {
-            var se = document.scrollingElement || document.documentElement;
-            se.scrollTop += 1; se.scrollTop -= 1;
-            var h = document.documentElement;
-            h.style.setProperty('transform', 'translateZ(0)');
-            requestAnimationFrame(function () { requestAnimationFrame(function () { h.style.removeProperty('transform'); }); });
-          }
-          return changed;
-        })();
-    """.trimIndent()
-
-    /**
-     * Makes the page draw fresh frames. A new WebView background colour only shows up on the
-     * next frame the page draws; when the photos come from cache nothing on the page changes,
-     * so no frame comes until you touch the screen. A near-invisible opacity flicker on the
-     * whole page over a few frames forces them.
-     */
-    val REPAINT_JS = """
-        (function () {
-          var h = document.documentElement, n = 0;
-          function step() {
-            h.style.setProperty('opacity', (n % 2) ? '1' : '0.999');
-            if (++n < 6) requestAnimationFrame(step); else h.style.removeProperty('opacity');
-          }
-          requestAnimationFrame(step);
-        })();
-    """.trimIndent()
-
-    /** One-off diagnostic for the white band under the photo viewer. */
-    val BAND_JS = """
-        (function () {
-          function tag(e) { var c = (typeof e.className === 'string' && e.className) ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : ''; return e.tagName + (e.id ? '#' + e.id : '') + c; }
-          function R(e) { var r = e.getBoundingClientRect(); return Math.round(r.top) + '-' + Math.round(r.bottom) + ' w' + Math.round(r.width); }
-          var out = ['vw=' + innerWidth + 'x' + innerHeight + ' path=' + location.pathname,
-                     'html class="' + document.documentElement.className + '" html bg=' + getComputedStyle(document.documentElement).backgroundColor + ' body bg=' + getComputedStyle(document.body).backgroundColor,
-                     'snapped strips: ' + document.querySelectorAll('[data-om-snap]').length + ' darkened: ' + ((window.__omDarkened || []).length)];
-          var strip = document.querySelector('[data-om-snap]') || document.querySelector('.hscroller');
-          if (strip) {
-            out.push('strip ' + tag(strip) + ' ' + R(strip) + ' snapped=' + !!strip.getAttribute('data-om-snap'));
-            for (var e = strip, n = 0; e && n < 10; e = e.parentElement, n++) {
-              var s = getComputedStyle(e);
-              out.push(' up' + n + ' ' + tag(e) + ' ' + R(e) + ' bg=' + s.backgroundColor + (s.backgroundImage !== 'none' ? ' bgimg' : '') + ' pos=' + s.position);
-            }
-          } else out.push('no strip found');
-          // Every strip we ever snapped, and every scroller still on the page: is the one on
-          // screen the one we snapped, where is it scrolled to, and are its photos loaded?
-          Array.prototype.forEach.call(document.querySelectorAll('[data-om-snap], .hscroller'), function (sc, i) {
-            var r = sc.getBoundingClientRect(), s = getComputedStyle(sc);
-            out.push('SC' + i + ' ' + tag(sc) + ' snap=' + !!sc.getAttribute('data-om-snap') + ' conn=' + sc.isConnected + ' ' + R(sc) + ' left=' + Math.round(r.left) +
-              ' sl=' + Math.round(sc.scrollLeft) + '/' + sc.scrollWidth + ' cw=' + sc.clientWidth + ' kids=' + sc.children.length + ' vis=' + s.visibility + ' op=' + s.opacity + ' d=' + s.display);
-            Array.prototype.slice.call(sc.querySelectorAll('img'), 0, 6).forEach(function (im, k) {
-              var ir = im.getBoundingClientRect(), is = getComputedStyle(im);
-              out.push('  img' + k + ' x=' + Math.round(ir.left) + ' ' + R(im) + ' done=' + im.complete + ' nat=' + im.naturalWidth + ' op=' + is.opacity + ' vis=' + is.visibility + ' src=' + (im.currentSrc || im.src || '').split('?')[0].slice(-24));
-            });
-          });
-          var mid = document.elementsFromPoint(innerWidth / 2, innerHeight / 2).slice(0, 6);
-          out.push('stack @middle: ' + mid.map(function (el) { var s = getComputedStyle(el); return tag(el) + '[' + R(el) + ' bg=' + s.backgroundColor + ']'; }).join(' > '));
-          [innerHeight - 70, innerHeight - 55, innerHeight - 40].forEach(function (y) {
-            out.push('stack @y=' + y + ': ' + document.elementsFromPoint(innerWidth / 2, y).slice(0, 8).map(function (el) {
-              var s = getComputedStyle(el); return tag(el) + '[' + R(el) + ' bg=' + s.backgroundColor + ' pos=' + s.position + ']';
-            }).join(' > '));
-          });
-          return out.join('\n');
-        })()
     """.trimIndent()
 
     /** Shows the bottom event log. Off for normal use. */
