@@ -9,9 +9,6 @@ import android.webkit.CookieManager
  */
 object Marketplace {
 
-    /** Bump to make the next launch wipe all site data once (fresh browser identity). */
-    const val RESET_GENERATION = 2 // 2: switched to a single mobile identity
-
     const val HOME = "https://m.facebook.com/marketplace/"
     const val LOGIN = "https://m.facebook.com/login/?next=$HOME"
 
@@ -124,116 +121,29 @@ object Marketplace {
         })()
     """.trimIndent()
 
-    /** Compact readout for login/checkpoint pages: is there a form, and is it on screen? */
-    const val AUTH_DIAG = true
-    val AUTH_DIAG_JS = """
-        (function () {
-          var i = document.querySelector('input:not([type=hidden])');
-          var r = i ? i.getBoundingClientRect() : null;
-          var t = ((document.body && document.body.innerText) || '').replace(/\s+/g, ' ').trim();
-          return document.title.slice(0, 22) + ' | page h=' + document.documentElement.scrollHeight + ' text=' + t.length +
-            ' input=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) : 'none') +
-            ' | ' + (window.__omUnclip || 'unclip not run');
-        })()
-    """.trimIndent()
-
-    /**
-     * Full page report for a login/checkpoint page that renders blank. Everything that could
-     * explain "laid out but not painted": structure, the form field's ancestor chain with full
-     * styles, positioned and large white boxes, the paint stack at several points, pseudo
-     * elements, and a slice of raw HTML. Copied to the clipboard to paste into chat.
-     */
-    val DIAG_FULL_JS = """
-        (function () {
-          try {
-            function R(el) { var r = el.getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); }
-            function tag(el) {
-              var c = (el.className && typeof el.className === 'string') ? el.className.trim().split(/\s+/).slice(0, 3).join('.') : '';
-              return el.tagName + (el.id ? '#' + el.id : '') + (c ? '.' + c : '') + (el.getAttribute && el.getAttribute('role') ? '[role=' + el.getAttribute('role') + ']' : '');
-            }
-            function sty(el) {
-              var s = getComputedStyle(el);
-              return 'd=' + s.display + ' pos=' + s.position + ' ov=' + s.overflow + ' h=' + s.height + ' w=' + s.width + ' op=' + s.opacity + ' vis=' + s.visibility +
-                ' tf=' + s.transform + ' clip=' + s.clip + ' cp=' + s.clipPath + ' filt=' + s.filter + ' bg=' + s.backgroundColor + ' z=' + s.zIndex +
-                ' top=' + s.top + ' left=' + s.left + ' pe=' + s.pointerEvents + ' cv=' + s.contentVisibility + ' ct=' + s.contain + ' col=' + s.color;
-            }
-            var out = [], i, n, el, s, r;
-            out.push('URL ' + location.href);
-            out.push('TITLE ' + document.title + ' | readyState=' + document.readyState);
-            out.push('VIEWPORT ' + innerWidth + 'x' + innerHeight + ' dpr=' + devicePixelRatio + ' scroll=' + scrollX + ',' + scrollY + ' docH=' + document.documentElement.scrollHeight + ' bodyH=' + document.body.scrollHeight);
-            var vm = document.querySelector('meta[name=viewport]'); out.push('META viewport=' + (vm ? vm.content : 'none'));
-            out.push('HTML ' + sty(document.documentElement));
-            out.push('BODY ' + R(document.body) + ' ' + sty(document.body) + ' children=' + document.body.children.length + ' all=' + document.querySelectorAll('*').length);
-            var tops = [document.documentElement, document.body].concat(Array.prototype.slice.call(document.body.children, 0, 12));
-            ['::before', '::after'].forEach(function (p) {
-              tops.forEach(function (t) {
-                var ps = getComputedStyle(t, p);
-                if (ps.content && ps.content !== 'none' && ps.content !== 'normal') out.push('PSEUDO ' + tag(t) + p + ' content=' + ps.content + ' pos=' + ps.position + ' bg=' + ps.backgroundColor + ' w=' + ps.width + ' h=' + ps.height + ' z=' + ps.zIndex);
-              });
-            });
-            out.push('--- BODY CHILDREN (2 levels)');
-            Array.prototype.forEach.call(document.body.children, function (k) {
-              out.push(' ' + tag(k) + ' ' + R(k) + ' ' + sty(k));
-              Array.prototype.slice.call(k.children, 0, 10).forEach(function (g) {
-                var gs = getComputedStyle(g);
-                out.push('    ' + tag(g) + ' ' + R(g) + ' d=' + gs.display + ' pos=' + gs.position + ' ov=' + gs.overflow + ' bg=' + gs.backgroundColor + ' op=' + gs.opacity + ' vis=' + gs.visibility + ' z=' + gs.zIndex + ' txt="' + g.textContent.trim().replace(/\s+/g, ' ').slice(0, 40) + '"');
-              });
-            });
-            var inputs = document.querySelectorAll('input:not([type=hidden])');
-            out.push('--- INPUTS ' + inputs.length);
-            Array.prototype.forEach.call(inputs, function (x) { var xs = getComputedStyle(x); out.push(' INPUT type=' + x.type + ' name=' + x.name + ' ph="' + x.placeholder + '" ' + R(x) + ' d=' + xs.display + ' vis=' + xs.visibility + ' op=' + xs.opacity + ' col=' + xs.color + ' bg=' + xs.backgroundColor); });
-            var a = inputs[0] || document.querySelector('iframe, button, [role=button]');
-            if (a) {
-              out.push('--- CHAIN from ' + tag(a));
-              for (el = a; el && el !== document; el = el.parentElement) out.push(' ' + tag(el) + ' ' + R(el) + ' ' + sty(el));
-            }
-            var all = document.querySelectorAll('body *');
-            out.push('--- POSITIONED fixed/absolute covering >50% viewport');
-            for (i = 0, n = 0; i < all.length && n < 30; i++) {
-              el = all[i]; s = getComputedStyle(el);
-              if (s.position !== 'fixed' && s.position !== 'absolute') continue;
-              r = el.getBoundingClientRect(); if (r.width < innerWidth * 0.5 || r.height < innerHeight * 0.5) continue;
-              n++; out.push(' ' + tag(el) + ' ' + R(el) + ' bg=' + s.backgroundColor + ' z=' + s.zIndex + ' pe=' + s.pointerEvents + ' op=' + s.opacity + ' vis=' + s.visibility + ' d=' + s.display + ' hasForm=' + (a ? el.contains(a) : '-'));
-            }
-            out.push('--- BIG LIGHT BOXES (opaque light bg, >70% viewport)');
-            for (i = 0, n = 0; i < all.length && n < 20; i++) {
-              el = all[i]; s = getComputedStyle(el); var bg = s.backgroundColor;
-              var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(bg); if (!m) continue;
-              if (+m[1] < 220 || +m[2] < 220 || +m[3] < 220 || (m[4] !== undefined && +m[4] < 0.5)) continue;
-              r = el.getBoundingClientRect(); if (r.width < innerWidth * 0.7 || r.height < innerHeight * 0.7) continue;
-              n++; out.push(' ' + tag(el) + ' ' + R(el) + ' bg=' + bg + ' pos=' + s.position + ' z=' + s.zIndex + ' op=' + s.opacity + ' hasForm=' + (a ? el.contains(a) : '-'));
-            }
-            out.push('--- PAINT STACK (elementsFromPoint, top first)');
-            [[0.5, 0.3], [0.5, 0.5], [0.2, 0.7], [0.8, 0.12], [0.5, 0.9]].forEach(function (p) {
-              var x = innerWidth * p[0], y = innerHeight * p[1], st = document.elementsFromPoint(x, y);
-              out.push(' @' + Math.round(x) + ',' + Math.round(y) + ': ' + st.slice(0, 7).map(function (e) { return tag(e) + '(' + getComputedStyle(e).backgroundColor + ')'; }).join(' > '));
-            });
-            out.push('--- TEXT (innerText, 300 chars)');
-            out.push(((document.body.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 300));
-            out.push('--- UNCLIP ' + (window.__omUnclip || 'not run'));
-            out.push('--- CRASH SITE (code around the JS error, if any)' + (window.__omSnippet || '\nnone'));
-            out.push('--- SCRIPTS ' + document.scripts.length + ' total, external: ' + Array.prototype.filter.call(document.scripts, function (s) { return s.src; }).map(function (s) { return s.src.split('/').pop().slice(0, 40); }).join(', '));
-            out.push('--- HTML (body outerHTML, 2500 chars)');
-            out.push(document.body.outerHTML.replace(/\s+/g, ' ').slice(0, 2500));
-            return out.join('\n');
-          } catch (e) { return 'DIAG FAILED: ' + e; }
-        })()
-    """.trimIndent()
-
-    /** Shows a toast with the URL whenever the app blocks or redirects something. Turn off once stable. */
+    /** Shows the bottom event log. Off for normal use. */
     const val DEBUG_TOASTS = false
 
-    /** One-line page report for the debug strip: is the content there, visible, and on screen? */
-    val DIAG_JS = """
+    /**
+     * Scroll-performance report (long-press the Marketplace header to copy it). Separates the
+     * app's own work (scan time) from Facebook's fetch latency (bottom → new listings).
+     */
+    val PERF_JS = """
         (function () {
-          var b = document.body; if (!b) return 'no body';
-          var cs = getComputedStyle(b);
-          var i = document.querySelector('input');
-          var r = i ? i.getBoundingClientRect() : null;
-          return document.title.slice(0, 24) + ' | op=' + cs.opacity + ' vis=' + cs.visibility +
-            ' w=' + innerWidth + ' h=' + document.documentElement.scrollHeight + ' sy=' + scrollY +
-            ' input@' + (r ? Math.round(r.top) + ',' + Math.round(r.left) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) : 'none') +
-            ' | hid=[' + ((window.__omHid || []).join(' ; ')) + '] DUMP: ' + (window.__omDump || '-');
+          var s = window.__omStats; if (!s) return 'no stats (cleanup not running on this page)';
+          var b = s.batches, avg = b.length ? Math.round(b.reduce(function (a, x) { return a + x; }, 0) / b.length) : 0;
+          var res = performance.getEntriesByType('resource');
+          var xhr = res.filter(function (r) { return r.initiatorType === 'xmlhttprequest' || r.initiatorType === 'fetch'; });
+          var slow = xhr.filter(function (r) { return r.duration > 1000; }).length;
+          var xavg = xhr.length ? Math.round(xhr.reduce(function (a, r) { return a + r.duration; }, 0) / xhr.length) : 0;
+          var imgs = res.filter(function (r) { return r.initiatorType === 'img'; });
+          var iavg = imgs.length ? Math.round(imgs.reduce(function (a, r) { return a + r.duration; }, 0) / imgs.length) : 0;
+          var mem = performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : 'n/a';
+          return 'APP WORK: scans=' + s.scans + ' total=' + Math.round(s.scanMs) + 'ms max=' + Math.round(s.maxScanMs) + 'ms nodes=' + s.nodesSeen +
+            '\nLISTING BATCHES (bottom → arrival, ms): ' + (b.length ? b.join(', ') + ' avg=' + avg : 'none recorded') +
+            '\nNETWORK: xhr/fetch=' + xhr.length + ' avg=' + xavg + 'ms slow(>1s)=' + slow + ' | images=' + imgs.length + ' avg=' + iavg + 'ms' +
+            '\nPAGE: elements=' + document.querySelectorAll('*').length + ' height=' + document.documentElement.scrollHeight + ' heap=' + mem +
+            '\nSLOWEST REQUESTS: ' + xhr.slice().sort(function (a, c) { return c.duration - a.duration; }).slice(0, 5).map(function (r) { return Math.round(r.duration) + 'ms ' + r.name.replace(/^https?:\/\/[^/]+/, '').slice(0, 50); }).join(' | ');
         })()
     """.trimIndent()
 
@@ -366,6 +276,22 @@ object Marketplace {
               hide(c); c = c.parentElement;
             }
           }
+          // Whole sections headed "Suggested buy and sell groups" / "Suggested for you" (ads):
+          // from the heading, climb to the first full-width block and hide it. The listings
+          // grid is also full-width, so stop at the first one that does NOT contain listing
+          // prices (keeps a heading that is itself inside the grid from taking the grid down).
+          var SECTION = /^(Suggested buy and sell groups|Suggested for you|Sponsored|Ads)$/i;
+          function hideSection(heading) {
+            var el = heading;
+            while (el && el !== document.body) {
+              var r = el.getBoundingClientRect();
+              if (r.width >= innerWidth * 0.9 && r.height > 40) {
+                if (/CA\$|\$\d|FREE/.test(el.innerText)) return; // contains listings — too far
+                hide(el); return;
+              }
+              el = el.parentElement;
+            }
+          }
           // "Open app" upsell: hide the fixed/sticky strip it sits in.
           function hideUpsell(el) {
             var box = el, p = el.parentElement;
@@ -390,16 +316,31 @@ object Marketplace {
                 var t = el.textContent.trim();
                 if (t === 'Ad' || t === 'Sponsored') hideAdCell(el);
                 else if (UPSELL.test(t)) hideUpsell(el);
+                else if (t.length < 40 && SECTION.test(t)) hideSection(el);
               }
             }
           }
+          // Timing: how long each scan takes, and how long between reaching the bottom of the
+          // page and new listings appearing. Read out via the clipboard report.
+          var stats = window.__omStats = { scans: 0, scanMs: 0, maxScanMs: 0, batches: [], lastBottomAt: 0, nodesSeen: 0 };
+          var scanRaw = scan;
+          scan = function (root) {
+            var t0 = performance.now(); scanRaw(root); var dt = performance.now() - t0;
+            stats.scans++; stats.scanMs += dt; if (dt > stats.maxScanMs) stats.maxScanMs = dt;
+          };
           window.__omScan = scan;
           scan(document.body);
 
           // Never compete with scrolling: queue added nodes, and process them only once the
           // user has paused for a moment, in idle time where the browser offers it.
           var pending = [], lastScroll = 0;
-          addEventListener('scroll', function () { lastScroll = Date.now(); }, { passive: true, capture: true });
+          addEventListener('scroll', function () {
+            lastScroll = Date.now();
+            // Near the bottom → Facebook should start fetching more. Note the time so the gap
+            // until new listings arrive can be measured.
+            var se = document.scrollingElement || document.documentElement;
+            if (se.scrollTop + innerHeight > se.scrollHeight - 600 && !stats.lastBottomAt) stats.lastBottomAt = Date.now();
+          }, { passive: true, capture: true });
           function drain() {
             window.__omTimer = 0;
             if (!pending.length) return;
@@ -409,9 +350,16 @@ object Marketplace {
             if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1500 }); else run();
           }
           new MutationObserver(function (records) {
+            var big = 0;
             for (var r = 0; r < records.length; r++) {
               var added = records[r].addedNodes;
-              for (var n = 0; n < added.length; n++) if (added[n].nodeType === 1) pending.push(added[n]);
+              for (var n = 0; n < added.length; n++) if (added[n].nodeType === 1) { pending.push(added[n]); stats.nodesSeen++; if (added[n].querySelectorAll('*').length > 30) big++; }
+            }
+            // A sizeable addition after we hit the bottom = a batch of listings arriving.
+            if (big && stats.lastBottomAt) {
+              stats.batches.push(Date.now() - stats.lastBottomAt);
+              if (stats.batches.length > 20) stats.batches.shift();
+              stats.lastBottomAt = 0;
             }
             if (pending.length && !window.__omTimer) window.__omTimer = setTimeout(drain, 150);
           }).observe(document.documentElement, { childList: true, subtree: true });

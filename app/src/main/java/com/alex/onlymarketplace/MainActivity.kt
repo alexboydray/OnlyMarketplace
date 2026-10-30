@@ -1,7 +1,6 @@
 package com.alex.onlymarketplace
 
 import android.annotation.SuppressLint
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -41,12 +40,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var debugLog: TextView
-    private lateinit var authStrip: TextView
     private val logLines = ArrayDeque<String>()
     private val jsErrors = ArrayDeque<String>()   // console errors on the current page
-    private var fullReport = ""                   // diagnostic for the current auth page
-    private val reports = ArrayDeque<Pair<Int, String>>() // last few auth pages, keyed by page id
-    private var pageSeq = 0
     private var mobileUa = ""
 
     /**
@@ -70,32 +65,15 @@ class MainActivity : ComponentActivity() {
         WebSettingsCompat.setUserAgentMetadata(webView.settings, meta)
     }
 
-    /** Names of the cookies Facebook has set, for the diagnostic. Values are never read out. */
-    private fun cookieNames(): String {
-        val raw = CookieManager.getInstance().getCookie("https://www.facebook.com").orEmpty()
-        val names = raw.split(';').map { it.substringBefore('=').trim() }.filter { it.isNotEmpty() }
-        return if (names.isEmpty()) "(none)" else names.sorted().joinToString(", ")
-    }
-
-    /** Manual, user-triggered only: wipe all site data and start over logged out. */
-    private fun confirmClearSiteData() {
-        AlertDialog.Builder(this)
-            .setTitle("Clear Facebook site data?")
-            .setMessage("Removes all cookies and stored data for Facebook in this app. You'll be logged out and start fresh.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Clear") { _, _ ->
-                CookieManager.getInstance().removeAllCookies {
-                    CookieManager.getInstance().flush()
-                    WebStorage.getInstance().deleteAllData()
-                    webView.clearCache(true)
-                    webView.clearHistory()
-                    Marketplace.allowRootUntil = 0L
-                    authStrip.visibility = View.GONE
-                    Toast.makeText(this, "Site data cleared", Toast.LENGTH_SHORT).show()
-                    webView.loadUrl(Marketplace.HOME)
-                }
-            }
-            .show()
+    /** Temporary: copy the scroll-performance report to the clipboard. */
+    private fun copyPerfReport() {
+        webView.evaluateJavascript(Marketplace.PERF_JS) { raw ->
+            val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
+            val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} perf\nURL ${webView.url}\n$body\nJS ERRORS: ${jsErrors.joinToString(" | ")}"
+            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace perf", text))
+            Toast.makeText(this, "Speed report copied — paste it into the chat", Toast.LENGTH_LONG).show()
+        }
     }
 
     /** Debug strip at the bottom of the screen; keeps the last few events. Tap it to clear. */
@@ -135,28 +113,20 @@ class MainActivity : ComponentActivity() {
             visibility = if (Marketplace.DEBUG_TOASTS) View.VISIBLE else View.GONE
             setOnClickListener { logLines.clear(); text = "" }
         }
-        // Compact readout for login/checkpoint pages only: three lines at the top, tap to dismiss.
-        authStrip = TextView(this).apply {
-            setBackgroundColor(0xCC000000.toInt())
+        // Temporary speed-report button (bottom-right). Removed once scrolling is sorted.
+        val perfButton = TextView(this).apply {
+            text = "⏱"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setBackgroundColor(0x551877F2)
             setTextColor(0xFFFFFFFF.toInt())
-            textSize = 11f
-            maxLines = 4
-            setPadding(24, 8, 24, 8)
-            visibility = View.GONE
-            setOnClickListener {
-                visibility = View.GONE
-                if (fullReport.isNotEmpty()) {
-                    val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace diagnostic", fullReport))
-                    Toast.makeText(this@MainActivity, "Report copied — paste it into the chat", Toast.LENGTH_LONG).show()
-                }
-            }
-            setOnLongClickListener { confirmClearSiteData(); true }
+            setOnClickListener { copyPerfReport() }
         }
+        val px = (44 * resources.displayMetrics.density).toInt()
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(debugLog, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
-            addView(authStrip, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
+            addView(perfButton, FrameLayout.LayoutParams(px, px, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, px / 3, px / 3) })
         }
         setContentView(root)
 
@@ -201,21 +171,6 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this) {
             if (webView.canGoBack()) webView.goBack() else finish()
-        }
-
-        // One-time clean slate (per RESET_GENERATION): an earlier version wiped only part of
-        // Facebook's cookie jar, which Facebook treats as a tampered device and then refuses to
-        // open a session after login. Clearing everything makes it a brand-new browser.
-        val prefs = getSharedPreferences("om", MODE_PRIVATE)
-        val resetDone = prefs.getInt("reset_generation", 0) >= Marketplace.RESET_GENERATION
-        if (!resetDone) {
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-            WebStorage.getInstance().deleteAllData()
-            webView.clearCache(true)
-            webView.clearHistory()
-            prefs.edit().putInt("reset_generation", Marketplace.RESET_GENERATION).apply()
-            note("Site data reset (generation ${Marketplace.RESET_GENERATION})")
         }
 
         if (savedInstanceState == null) {
@@ -364,39 +319,6 @@ class MainActivity : ComponentActivity() {
                 unclip()
                 view.postDelayed(unclip, 800)
                 view.postDelayed(unclip, 2500)
-                if (Marketplace.AUTH_DIAG) {
-                    // One report per page in the login chain (kept for the last 3 pages), each
-                    // captured early and again once the page has settled.
-                    val pageId = ++pageSeq
-                    reports.addLast(pageId to "")
-                    while (reports.size > 3) reports.removeFirst()
-                    val capture = { label: String ->
-                        view.evaluateJavascript(Marketplace.DIAG_FULL_JS) { raw ->
-                            val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
-                            val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} — $label\n" +
-                                "PAGE $url\n" +
-                                "COOKIES (names only): ${cookieNames()}\n" +
-                                "APP THINKS LOGGED IN: ${Marketplace.isLoggedIn()}\n" +
-                                "JS ERRORS (${jsErrors.size}):\n" +
-                                jsErrors.joinToString("\n") { "  $it" } + "\n\n" + body
-                            val idx = reports.indexOfFirst { it.first == pageId }
-                            if (idx >= 0) reports[idx] = pageId to text
-                            val filled = reports.map { it.second }.filter { it.isNotEmpty() }
-                            fullReport = filled.joinToString("\n\n==================== NEXT PAGE ====================\n\n")
-                            view.evaluateJavascript(Marketplace.AUTH_DIAG_JS) { r ->
-                                authStrip.text = r.trim('"') + "\n▶ Tap: copy report (${filled.size} pages) and paste in chat · Long-press: clear Facebook site data"
-                                authStrip.visibility = View.VISIBLE
-                            }
-                        }
-                    }
-                    view.postDelayed({ capture("at 4s") }, 4000)
-                    view.postDelayed({ capture("at 9s") }, 9000)
-                }
-            } else {
-                authStrip.visibility = View.GONE
-            }
-            if (Marketplace.DEBUG_TOASTS) {
-                view.evaluateJavascript(Marketplace.DIAG_JS) { note("DONE $it") }
             }
         }
     }
@@ -407,18 +329,8 @@ class MainActivity : ComponentActivity() {
 
         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
             if (msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                jsErrors.addLast("${msg.message().take(300)} @ ${msg.sourceId().take(200)}:${msg.lineNumber()}")
-                while (jsErrors.size > 25) jsErrors.removeFirst()
-                // For a crash in one of Facebook's scripts, grab the code around that line so
-                // the report shows what it was looking for. Done in the page (same origin rules).
-                if (msg.sourceId().startsWith("http") && msg.message().contains("TypeError")) {
-                    val src = msg.sourceId().replace("'", "\\'")
-                    webView.evaluateJavascript(
-                        "fetch('$src').then(r=>r.text()).then(t=>{var L=t.split('\\n');var n=${msg.lineNumber()};" +
-                        "window.__omSnippet=(window.__omSnippet||'')+'\\n--- ' + '$src'.slice(-40) + ':' + n + '\\n' + L.slice(Math.max(0,n-3),n+2).join('\\n').slice(0,1500);}).catch(e=>{window.__omSnippet='fetch failed: '+e;});",
-                        null
-                    )
-                }
+                jsErrors.addLast("${msg.message().take(200)} @ ${msg.sourceId().substringAfterLast('/').take(40)}:${msg.lineNumber()}")
+                while (jsErrors.size > 10) jsErrors.removeFirst()
                 if (Marketplace.DEBUG_TOASTS && jsErrorsShown < 3) {
                     jsErrorsShown++
                     note("JS ${msg.message().take(90)} @ ${msg.sourceId().substringAfterLast('/').take(40)}:${msg.lineNumber()}")
