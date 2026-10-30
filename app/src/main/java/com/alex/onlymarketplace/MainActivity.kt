@@ -107,25 +107,9 @@ class MainActivity : ComponentActivity() {
             visibility = if (Marketplace.DEBUG_TOASTS) View.VISIBLE else View.GONE
             setOnClickListener { logLines.clear(); text = "" }
         }
-        // Temporary (one round): copies the photo-viewer band diagnostic. Top-right, clear of the
-        // viewer's bottom bar.
-        val diagButton = TextView(this).apply {
-            text = "⏱"; textSize = 18f; gravity = Gravity.CENTER
-            setBackgroundColor(0x550866FF); setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener {
-                webView.evaluateJavascript(Marketplace.BAND_JS) { raw ->
-                    val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
-                    val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace", "OnlyMarketplace ${BuildConfig.VERSION_NAME} band\n$body"))
-                    Toast.makeText(this@MainActivity, "Report copied — paste it into the chat", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-        val px = (44 * resources.displayMetrics.density).toInt()
         val root = FrameLayout(this).apply {
             addView(refresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(debugLog, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
-            addView(diagButton, FrameLayout.LayoutParams(px, px, Gravity.CENTER_VERTICAL or Gravity.END))
         }
         setContentView(root)
 
@@ -268,6 +252,16 @@ class MainActivity : ComponentActivity() {
             return bounce(view, url.toString()) // anything else bounces back to Marketplace (unless the loop guard says let it through)
         }
 
+        private fun syncViewerBackground(view: WebView) {
+            val check = Runnable {
+                view.evaluateJavascript("(location.pathname==='/'&&!!document.querySelector('[data-om-snap]'))") { r ->
+                    view.setBackgroundColor(if (r == "true") android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                }
+            }
+            view.postDelayed(check, 500)
+            view.postDelayed(check, 1300)
+        }
+
         // Facebook is a single-page app: most clicks change the URL with pushState, which never
         // reaches shouldOverrideUrlLoading. This hook fires for those, so we re-check here too.
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -275,6 +269,10 @@ class MainActivity : ComponentActivity() {
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
+            // The full-screen photo viewer is shorter than the screen, and below the page the
+            // WebView's own (white) background shows. Black while the viewer is open, white
+            // otherwise. Viewer open = address "/" (it's an overlay) with a snapped photo strip.
+            syncViewerBackground(view)
             if (Marketplace.isAllowed(uri)) {
                 if (Regex("/marketplace/item|/photo|/media").containsMatchIn(uri.path.orEmpty())) {
                     view.postDelayed({ view.evaluateJavascript(Marketplace.SNAP_JS, null) }, 600)
