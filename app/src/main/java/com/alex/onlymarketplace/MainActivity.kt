@@ -128,6 +128,11 @@ class MainActivity : ComponentActivity() {
             loadWithOverviewMode = true
             useWideViewPort = true
             setSupportMultipleWindows(false) // target=_blank links open in this same view
+            // Pinch zoom. Facebook's pages forbid zooming in their viewport tag, so this only
+            // takes effect where we loosen that tag: inside the photo viewer (see viewerCheck).
+            setSupportZoom(true)
+            builtInZoomControls = true
+            displayZoomControls = false // pinch only, no +/- buttons
             // Facebook refuses bare WebViews ("unsupported browser"). Strip the WebView markers
             // from the default UA so it looks like regular Chrome on Android.
             userAgentString = userAgentString
@@ -185,6 +190,9 @@ class MainActivity : ComponentActivity() {
                 if (dark != viewerDark) {
                     viewerDark = dark
                     webView.setBackgroundColor(if (dark) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                    // Viewer open: allow pinch zoom up to 5x. Closed: back to 1x and locked, so
+                    // the listings never end up zoomed.
+                    webView.evaluateJavascript(Marketplace.zoomJs(dark), null)
                 }
             }
             webView.postDelayed(this, 500)

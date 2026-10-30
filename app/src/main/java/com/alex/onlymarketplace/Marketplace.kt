@@ -261,6 +261,29 @@ object Marketplace {
         })();
     """.trimIndent()
 
+    /**
+     * Pinch zoom in the photo viewer: loosen Facebook's viewport tag (which forbids zooming) and
+     * let pinch gestures through elements that block them with touch-action. Turned off again,
+     * the tag is restored, which also snaps the page back to 1x.
+     */
+    fun zoomJs(on: Boolean) = """
+        (function () {
+          var m = document.querySelector('meta[name=viewport]');
+          if (!m) { m = document.createElement('meta'); m.name = 'viewport'; (document.head || document.documentElement).appendChild(m); }
+          if (m.getAttribute('data-om-orig') === null) m.setAttribute('data-om-orig', m.content || 'width=device-width, initial-scale=1');
+          var st = document.getElementById('om-zoom');
+          if (${on}) {
+            m.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes';
+            if (!st) { st = document.createElement('style'); st.id = 'om-zoom'; (document.head || document.documentElement).appendChild(st); }
+            st.textContent = '.hscroller, .hscroller * { touch-action: pan-x pan-y pinch-zoom !important; }';
+          } else {
+            m.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+            setTimeout(function () { m.content = m.getAttribute('data-om-orig'); }, 300);
+            if (st) st.textContent = '';
+          }
+        })();
+    """.trimIndent()
+
     /** One-off diagnostic for the white band under the photo viewer. */
     val BAND_JS = """
         (function () {
