@@ -420,13 +420,16 @@ object Marketplace {
           // heading, so nothing above it (the listing itself) goes, and (b) holds no links to
           // real Marketplace listings, so the listings grid never goes. (Ads can show prices
           // like "Save $50", so prices can't tell ads from listings; listing links can.)
-          var SECTION = /^(Suggested buy and sell groups|Suggested for you|Sponsored|Ads)$/i;
+          // "New for you" (notifications block at the top of Marketplace) goes too. Its card can
+          // link to a listing, so for it only the CA$ check guards the listings grid below.
+          var SECTION = /^(Suggested buy and sell groups|Suggested for you|Sponsored|Ads|New for you)$/i;
           function hideSection(heading) {
             var top = heading.getBoundingClientRect().top, el = heading, best = null;
+            var notif = /^New for you$/i.test(heading.textContent.trim());
             while (el && el !== document.body) {
               var r = el.getBoundingClientRect();
               if (r.top < top - 30) break;
-              if (el.querySelector('a[href*="/marketplace/item/"]')) break;
+              if (!notif && el.querySelector('a[href*="/marketplace/item/"]')) break;
               if (/CA\$/.test(el.innerText)) break; // listing prices read "CA$…"; ads say "$50"
               if (r.width >= innerWidth * 0.9 && r.height > 40) best = el;
               el = el.parentElement;
