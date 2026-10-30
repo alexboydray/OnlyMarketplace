@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
     /** Temporary: copy the scroll-performance report to the clipboard. */
     private fun copyPerfReport() {
         webView.evaluateJavascript("(function(){var p=" + Marketplace.PERF_JS + ";" + Marketplace.SNAP_JS + "var s=window.__omSnap;" +
-            "return p+'\\n--- PHOTO VIEWER STRUCTURE\\n'+(s&&s.dump?s.dump:'none');})()") { raw ->
+            "return p+'\\n--- PHOTO VIEWER (strips snapped: '+(s?s.done:0)+', already marked: '+document.querySelectorAll('[data-om-snap]').length+')\\n'+(s&&s.dump?s.dump:'none');})()") { raw ->
             val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
             val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} perf\nURL ${webView.url}\n$body\nJS ERRORS: ${jsErrors.joinToString(" | ")}" +
                 "\nRECENT NAVIGATION (oldest first):\n" + navLog.joinToString("\n") { "  $it" }

@@ -166,6 +166,50 @@ object Marketplace {
             }
           }
           window.__omSnap = { found: imgs.length, done: 0, skipped: [], dump: out.join('\n') };
+
+          // FIX (per the 0.6.4 report): the viewer/listing photo strip is a native horizontal
+          // scroller (overflow-x:auto) whose slides are already exactly one strip wide. It just
+          // has no snapping. Add snapping and NOTHING else — no size or image changes (those
+          // broke the viewer last time). Only for scrollers where every slide is full width and
+          // holds an image, so chip rows and other carousels are untouched.
+          function snap(sc) {
+            if (sc.getAttribute('data-om-snap')) return;
+            var w = sc.clientWidth, kids = sc.children;
+            if (w < 200 || kids.length < 2) return;
+            for (var i = 0; i < kids.length; i++) {
+              var kw = kids[i].getBoundingClientRect().width;
+              if (Math.abs(kw - w) > 3 || !kids[i].querySelector('img')) return;
+            }
+            sc.setAttribute('data-om-snap', '1');
+            sc.style.setProperty('scroll-snap-type', 'x mandatory', 'important');
+            for (var j = 0; j < kids.length; j++) {
+              kids[j].style.setProperty('scroll-snap-align', 'start', 'important');
+              kids[j].style.setProperty('scroll-snap-stop', 'always', 'important');
+            }
+            window.__omSnap.done++;
+          }
+          function snapAll() {
+            var els = document.querySelectorAll('div');
+            for (var i = 0; i < els.length; i++) {
+              var el = els[i];
+              if (el.scrollWidth <= el.clientWidth + 20) continue;
+              var ox = getComputedStyle(el).overflowX;
+              if (ox === 'auto' || ox === 'scroll') snap(el);
+            }
+          }
+          snapAll();
+          if (!window.__omSnapObs) {
+            var timer = 0;
+            window.__omSnapObs = new MutationObserver(function () {
+              if (timer) return;
+              timer = setTimeout(function () {
+                timer = 0;
+                // Listing and photo pages only (the viewer overlay sets the address to "/").
+                if (/\/marketplace\/item|\/photo|\/media|^\/$/.test(location.pathname)) snapAll();
+              }, 400);
+            });
+            window.__omSnapObs.observe(document.documentElement, { childList: true, subtree: true });
+          }
         })();
     """.trimIndent()
 
