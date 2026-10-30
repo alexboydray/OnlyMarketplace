@@ -427,6 +427,7 @@ object Marketplace {
               var r = el.getBoundingClientRect();
               if (r.top < top - 30) break;
               if (el.querySelector('a[href*="/marketplace/item/"]')) break;
+              if (/CA\$/.test(el.innerText)) break; // listing prices read "CA$…"; ads say "$50"
               if (r.width >= innerWidth * 0.9 && r.height > 40) best = el;
               el = el.parentElement;
             }
