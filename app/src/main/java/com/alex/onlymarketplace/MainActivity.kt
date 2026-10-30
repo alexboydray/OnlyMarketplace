@@ -193,7 +193,11 @@ class MainActivity : ComponentActivity() {
                     // Viewer open: allow pinch zoom up to 5x. Closed: back to 1x and locked, so
                     // the listings never end up zoomed.
                     webView.evaluateJavascript(Marketplace.zoomJs(dark), null)
+                    if (!dark) webView.evaluateJavascript(Marketplace.viewerDarkJs(false), null)
                 }
+                // While open, keep blacking out any white layer left under the viewer (it can
+                // appear a moment after the viewer does).
+                if (dark) webView.evaluateJavascript(Marketplace.viewerDarkJs(true), null)
             }
             webView.postDelayed(this, 500)
         }

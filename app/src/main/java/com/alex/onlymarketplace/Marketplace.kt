@@ -284,6 +284,39 @@ object Marketplace {
         })();
     """.trimIndent()
 
+    /**
+     * Second opening of the same photos: Facebook keeps the (white) listing screen in the page
+     * under the viewer, with pointer-events off, so it shows in the gap below the photo. While the
+     * viewer is open, find anything light painted in that gap — including untouchable layers —
+     * and make it black. When the viewer closes, put every colour back.
+     */
+    fun viewerDarkJs(on: Boolean) = """
+        (function () {
+          var done = window.__omBlack = window.__omBlack || [];
+          if (!${on}) {
+            while (done.length) { var d = done.pop(); d.el.style.removeProperty('background-color'); if (d.prev) d.el.style.setProperty('background-color', d.prev); }
+            return;
+          }
+          var strip = null;
+          [].some.call(document.querySelectorAll('.hscroller'), function (s) { if (s.getBoundingClientRect().height > 150) { strip = s; return true; } });
+          var viewer = strip; // leave the photos themselves alone
+          var y1 = innerHeight * 0.5, y2 = innerHeight - 70, x = innerWidth / 2;
+          var all = document.body ? document.body.getElementsByTagName('*') : [];
+          for (var k = 0; k < all.length; k++) {
+            var el = all[k];
+            if (viewer && viewer.contains(el)) continue;
+            var r = el.getBoundingClientRect();
+            if (r.width < innerWidth * 0.8 || r.bottom < y2 || r.top > y1 || r.left > x || r.right < x) continue;
+            var c = getComputedStyle(el).backgroundColor;
+            var m = /rgba?\((\d+), ?(\d+), ?(\d+)(?:, ?([\d.]+))?\)/.exec(c);
+            if (!m || +m[1] < 200 || +m[2] < 200 || +m[3] < 200 || (m[4] !== undefined && +m[4] < 0.3)) continue;
+            if (done.some(function (d) { return d.el === el; })) continue;
+            done.push({ el: el, prev: el.style.getPropertyValue('background-color') });
+            el.style.setProperty('background-color', '#000', 'important');
+          }
+        })();
+    """.trimIndent()
+
     /** One-off diagnostic for the white band under the photo viewer. */
     val BAND_JS = """
         (function () {
