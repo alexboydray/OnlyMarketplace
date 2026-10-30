@@ -42,6 +42,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var debugLog: TextView
     private val logLines = ArrayDeque<String>()
     private val jsErrors = ArrayDeque<String>()   // console errors on the current page
+    private val navLog = ArrayDeque<String>()     // last page loads / bounces, for the ⏱ report
+    private fun logNav(s: String) {
+        val t = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+        navLog.addLast("$t $s"); while (navLog.size > 15) navLog.removeFirst()
+    }
     private var mobileUa = ""
 
     /**
@@ -69,7 +74,8 @@ class MainActivity : ComponentActivity() {
     private fun copyPerfReport() {
         webView.evaluateJavascript(Marketplace.PERF_JS) { raw ->
             val body = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
-            val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} perf\nURL ${webView.url}\n$body\nJS ERRORS: ${jsErrors.joinToString(" | ")}"
+            val text = "OnlyMarketplace ${BuildConfig.VERSION_NAME} perf\nURL ${webView.url}\n$body\nJS ERRORS: ${jsErrors.joinToString(" | ")}" +
+                "\nRECENT NAVIGATION (oldest first):\n" + navLog.joinToString("\n") { "  $it" }
             val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText("OnlyMarketplace perf", text))
             Toast.makeText(this, "Speed report copied — paste it into the chat", Toast.LENGTH_LONG).show()
@@ -220,12 +226,12 @@ class MainActivity : ComponentActivity() {
             if (target == Marketplace.HOME && recentBounces.size >= 3) {
                 recentBounces.clear()
                 Marketplace.allowRootUntil = now + 60_000
-                note("LOOP → stop bouncing, letting Facebook's page show")
+                note("LOOP → stop bouncing, letting Facebook's page show"); logNav("LOOP GUARD fired")
                 Toast.makeText(this@MainActivity, "Redirect loop — showing Facebook's page", Toast.LENGTH_SHORT).show()
                 view.visibility = View.VISIBLE
                 return false
             }
-            note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}")
+            note(if (target == Marketplace.HOME) "BLOCK ${from.take(90)}" else "→LOGIN from ${from.take(80)}"); logNav("BOUNCE " + from.take(90) + " -> " + target.take(60))
             if (target == Marketplace.HOME) {
                 // Always-on, so a wrongly blocked page is easy to report (it shows the path).
                 val u = Uri.parse(from)
@@ -239,7 +245,7 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-            note("START ${url.take(100)}")
+            note("START ${url.take(100)}"); logNav("START " + url.take(110))
             jsErrors.clear()
             // Belt and braces: form posts and server redirects can skip shouldOverrideUrlLoading.
             val uri = Uri.parse(url)
@@ -272,6 +278,7 @@ class MainActivity : ComponentActivity() {
         // Facebook is a single-page app: most clicks change the URL with pushState, which never
         // reaches shouldOverrideUrlLoading. This hook fires for those, so we re-check here too.
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+            logNav((if (isReload) "RELOAD " else "ADDR ") + url.take(110))
             val uri = Uri.parse(url)
             if (!Marketplace.isFacebookHost(uri)) return
             Marketplace.loginRedirect(uri)?.let { bounce(view, url, it); return }
@@ -302,10 +309,16 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            logNav("DONE " + url.take(110) + " (view " + (if (view.visibility == View.VISIBLE) "shown" else "hidden") + ")")
             refresh.isRefreshing = false
             if (view.visibility != View.VISIBLE) {
-                // Uncover after the hide script has had a moment to run, so the bar never flashes either.
-                view.evaluateJavascript(Marketplace.HIDE_CHROME_JS) { view.postDelayed({ view.visibility = View.VISIBLE }, 120) }
+                // Uncover after the hide script has had a moment to run, so the bar never flashes
+                // either. Only Marketplace pages get the hide script; anything else just uncovers.
+                if (Uri.parse(url).path.orEmpty().startsWith("/marketplace")) {
+                    view.evaluateJavascript(Marketplace.HIDE_CHROME_JS) { view.postDelayed({ view.visibility = View.VISIBLE }, 120) }
+                } else {
+                    view.visibility = View.VISIBLE
+                }
             }
             view.postDelayed({ view.invalidate() }, 400) // nudge a repaint; some pages stay white otherwise
             val uri = Uri.parse(url)
