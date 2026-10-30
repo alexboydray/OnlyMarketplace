@@ -23,7 +23,17 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build release APK (debug-signed for sideloading)
+      - name: Restore signing key
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_B64" ]; then echo "::error::SIGNING_KEYSTORE_B64 secret missing"; exit 1; fi
+          echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/om.jks"
+
+      - name: Build release APK (signed with the permanent key so updates install over the top)
+        env:
+          SIGNING_STORE_FILE: ${{ runner.temp }}/om.jks
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: gradle --no-daemon assembleRelease
 
       - name: Rename APK

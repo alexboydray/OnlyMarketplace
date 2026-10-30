@@ -11,19 +11,35 @@ android {
         applicationId = "com.alex.onlymarketplace"
         minSdk = 28
         targetSdk = 35
-        versionCode = 63
-        versionName = "0.6.2"
+        versionCode = 64
+        versionName = "0.6.3"
     }
 
     buildFeatures {
         buildConfig = true
     }
 
+    // Permanent key (kept in C:\Users\Alex\Projects\OnlyMarketplace-signing, uploaded as repo
+    // secrets). Every build must use the SAME key or Android refuses to update the installed app.
+    signingConfigs {
+        create("permanent") {
+            val store = System.getenv("SIGNING_STORE_FILE")
+            if (store != null) {
+                storeFile = file(store)
+                storePassword = System.getenv("SIGNING_PASSWORD")
+                keyAlias = "onlymarketplace"
+                keyPassword = System.getenv("SIGNING_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Debug-signed so it installs as a plain sideload. Replace with a real keystore later if wanted.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("SIGNING_STORE_FILE") != null)
+                signingConfigs.getByName("permanent")
+            else
+                signingConfigs.getByName("debug") // local builds only; CI always has the key
         }
     }
 
