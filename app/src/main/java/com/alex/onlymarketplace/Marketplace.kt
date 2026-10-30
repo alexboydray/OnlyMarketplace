@@ -416,20 +416,21 @@ object Marketplace {
             }
           }
           // Whole sections headed "Suggested buy and sell groups" / "Suggested for you" (ads):
-          // from the heading, climb to the first full-width block and hide it. The listings
-          // grid is also full-width, so stop at the first one that does NOT contain listing
-          // prices (keeps a heading that is itself inside the grid from taking the grid down).
+          // from the heading, climb and hide the biggest full-width block that (a) starts at the
+          // heading, so nothing above it (the listing itself) goes, and (b) holds no links to
+          // real Marketplace listings, so the listings grid never goes. (Ads can show prices
+          // like "Save $50", so prices can't tell ads from listings; listing links can.)
           var SECTION = /^(Suggested buy and sell groups|Suggested for you|Sponsored|Ads)$/i;
           function hideSection(heading) {
-            var el = heading;
+            var top = heading.getBoundingClientRect().top, el = heading, best = null;
             while (el && el !== document.body) {
               var r = el.getBoundingClientRect();
-              if (r.width >= innerWidth * 0.9 && r.height > 40) {
-                if (/CA\$|\$\d|FREE/.test(el.innerText)) return; // contains listings — too far
-                hide(el); return;
-              }
+              if (r.top < top - 30) break;
+              if (el.querySelector('a[href*="/marketplace/item/"]')) break;
+              if (r.width >= innerWidth * 0.9 && r.height > 40) best = el;
               el = el.parentElement;
             }
+            if (best) hide(best);
           }
           // "Open app" upsell: hide the fixed/sticky strip it sits in.
           function hideUpsell(el) {
