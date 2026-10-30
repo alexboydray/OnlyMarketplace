@@ -277,6 +277,19 @@ object Marketplace {
               out.push(' up' + n + ' ' + tag(e) + ' ' + R(e) + ' bg=' + s.backgroundColor + (s.backgroundImage !== 'none' ? ' bgimg' : '') + ' pos=' + s.position);
             }
           } else out.push('no strip found');
+          // Every strip we ever snapped, and every scroller still on the page: is the one on
+          // screen the one we snapped, where is it scrolled to, and are its photos loaded?
+          Array.prototype.forEach.call(document.querySelectorAll('[data-om-snap], .hscroller'), function (sc, i) {
+            var r = sc.getBoundingClientRect(), s = getComputedStyle(sc);
+            out.push('SC' + i + ' ' + tag(sc) + ' snap=' + !!sc.getAttribute('data-om-snap') + ' conn=' + sc.isConnected + ' ' + R(sc) + ' left=' + Math.round(r.left) +
+              ' sl=' + Math.round(sc.scrollLeft) + '/' + sc.scrollWidth + ' cw=' + sc.clientWidth + ' kids=' + sc.children.length + ' vis=' + s.visibility + ' op=' + s.opacity + ' d=' + s.display);
+            Array.prototype.slice.call(sc.querySelectorAll('img'), 0, 6).forEach(function (im, k) {
+              var ir = im.getBoundingClientRect(), is = getComputedStyle(im);
+              out.push('  img' + k + ' x=' + Math.round(ir.left) + ' ' + R(im) + ' done=' + im.complete + ' nat=' + im.naturalWidth + ' op=' + is.opacity + ' vis=' + is.visibility + ' src=' + (im.currentSrc || im.src || '').split('?')[0].slice(-24));
+            });
+          });
+          var mid = document.elementsFromPoint(innerWidth / 2, innerHeight / 2).slice(0, 6);
+          out.push('stack @middle: ' + mid.map(function (el) { var s = getComputedStyle(el); return tag(el) + '[' + R(el) + ' bg=' + s.backgroundColor + ']'; }).join(' > '));
           [innerHeight - 70, innerHeight - 55, innerHeight - 40].forEach(function (y) {
             out.push('stack @y=' + y + ': ' + document.elementsFromPoint(innerWidth / 2, y).slice(0, 8).map(function (el) {
               var s = getComputedStyle(el); return tag(el) + '[' + R(el) + ' bg=' + s.backgroundColor + ' pos=' + s.position + ']';
