@@ -9,3 +9,5 @@ local.properties
 *.aab
 *.jks
 *.keystore
+# App signing key + its password. Never commit: the repo is public.
+signing/
